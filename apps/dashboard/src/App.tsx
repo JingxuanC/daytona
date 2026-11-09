@@ -11,7 +11,8 @@ import { UserOrganizationInvitationsProvider } from '@/providers/UserOrganizatio
 import { initPylon } from '@/vendor/pylon'
 import { OrganizationRolePermissionsEnum, OrganizationUserRoleEnum } from '@daytona/api-client'
 import { ShieldAlert } from 'lucide-react'
-import { useFeatureFlagEnabled, usePostHog } from 'posthog-js/react'
+import { usePostHog } from 'posthog-js/react'
+import { useFeatureFlag } from '@/hooks/useFeatureFlag'
 import { Suspense, useEffect, type ReactNode } from 'react'
 import { useAuth } from 'react-oidc-context'
 import {
@@ -235,7 +236,7 @@ function RequiredPermissionsOrganizationPageWrapper({
 }
 
 function RequiredFeatureFlagWrapper({ children, flagKey }: { children: ReactNode; flagKey: FeatureFlags }) {
-  const flagEnabled = useFeatureFlagEnabled(flagKey)
+  const flagEnabled = useFeatureFlag(flagKey)
 
   if (!flagEnabled) {
     return <Navigate to={RoutePath.DASHBOARD} replace />

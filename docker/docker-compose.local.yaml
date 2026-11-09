@@ -1,0 +1,36 @@
+# Local MVP overrides: force-enable organization_infrastructure feature flag
+# so orgs can self-register custom regions and runners (compute nodes).
+services:
+  api:
+    ports: !override
+      - 3100:3000
+    environment:
+      - OPENFEATURE_FORCE_ENABLED_FLAGS=organization_infrastructure
+      - POSTHOG_API_KEY=
+      - LOG_LEVEL=info
+      - TRANSIENT_REGISTRY_URL=http://172.18.0.100:6000
+      - INTERNAL_REGISTRY_URL=http://172.18.0.100:6000
+      - ADMIN_API_KEY=localdev-admin-key
+      - ADMIN_TOTAL_CPU_QUOTA=100
+      - ADMIN_TOTAL_MEMORY_QUOTA=200
+      - ADMIN_TOTAL_DISK_QUOTA=500
+      - ADMIN_MAX_CPU_PER_SANDBOX=8
+      - ADMIN_MAX_MEMORY_PER_SANDBOX=16
+      - ADMIN_MAX_DISK_PER_SANDBOX=50
+      - ADMIN_SNAPSHOT_QUOTA=100
+      - ADMIN_MAX_SNAPSHOT_SIZE=100
+      - ADMIN_VOLUME_QUOTA=100
+    networks:
+      daytona-network:
+        ipv4_address: 172.18.0.101
+  minio:
+    image: bitnamilegacy/minio:latest
+  runner:
+    environment:
+      - HTTPS_PROXY=http://192.168.5.2:1097
+      - HTTP_PROXY=http://192.168.5.2:1097
+      - NO_PROXY=api,minio,redis,db,dex,localhost,127.0.0.1
+  registry:
+    networks:
+      daytona-network:
+        ipv4_address: 172.18.0.100

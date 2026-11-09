@@ -17,8 +17,12 @@ staticClients:
       - 'http://localhost:3000/api/oauth2-redirect.html'
       - 'http://localhost:3009/callback'
       - 'http://proxy.localhost:4000/callback'
+      - 'http://127.0.0.1:3100'
+      - 'http://127.0.0.1:3100/dashboard'
+      - 'http://127.0.0.1:3100/api/oauth2-redirect.html'
     name: 'Daytona'
     public: true
+skipApprovalScreen: true
 enablePasswordDB: true
 staticPasswords:
   - email: 'dev@daytona.io'
