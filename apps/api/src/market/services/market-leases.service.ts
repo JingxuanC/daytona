@@ -21,7 +21,7 @@ import { MarketLease } from '../entities/market-lease.entity'
 import { MarketCreditService } from './market-credit.service'
 import { MarketListing } from '../entities/market-listing.entity'
 import { MarketLeaseStatus } from '../enums/market-lease-status.enum'
-import { MarketListingStatus } from '../enums/market-listing-status.enum'
+import { MarketListingStatus, MarketListingVisibility } from '../enums/market-listing-status.enum'
 import { CreateMarketLeaseDto, MarketLeaseDto } from '../dto/market-lease.dto'
 
 @Injectable()
@@ -153,6 +153,12 @@ export class MarketLeasesService {
     }
     if (listing.status !== MarketListingStatus.PUBLISHED) {
       throw new BadRequestException(`Listing is not available for lease (status=${listing.status})`)
+    }
+    if (
+      listing.visibility === MarketListingVisibility.PRIVATE &&
+      listing.providerOrganizationId !== consumerOrganizationId
+    ) {
+      throw new NotFoundException('Listing not found')
     }
 
     const requested = {

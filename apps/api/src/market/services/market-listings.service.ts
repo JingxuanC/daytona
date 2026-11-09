@@ -121,7 +121,7 @@ export class MarketListingsService {
     }
 
     const capacity = this.resolveCapacity(dto)
-    this.assertCapacity(capacity, dto)
+    this.assertCapacity(capacity)
 
     let listing = await this.listingRepository.findOne({
       where: { providerOrganizationId: organizationId, regionId: region.id },
@@ -176,7 +176,7 @@ export class MarketListingsService {
       maxMemoryPerSandbox: dto.maxMemoryPerSandbox ?? listing.maxMemoryPerSandbox,
       maxDiskPerSandbox: dto.maxDiskPerSandbox ?? listing.maxDiskPerSandbox,
     }
-    this.assertCapacity(capacity, { ...capacity, name: listing.name } as CreateMarketListingDto)
+    this.assertCapacity(capacity)
 
     Object.assign(listing, {
       name: dto.name ?? listing.name,
@@ -312,17 +312,14 @@ export class MarketListingsService {
     }
   }
 
-  private assertCapacity(
-    capacity: {
-      totalCpu: number
-      totalMemoryGiB: number
-      totalDiskGiB: number
-      maxCpuPerSandbox: number
-      maxMemoryPerSandbox: number
-      maxDiskPerSandbox: number
-    },
-    _dto: CreateMarketListingDto,
-  ): void {
+  private assertCapacity(capacity: {
+    totalCpu: number
+    totalMemoryGiB: number
+    totalDiskGiB: number
+    maxCpuPerSandbox: number
+    maxMemoryPerSandbox: number
+    maxDiskPerSandbox: number
+  }): void {
     const { totalCpu, totalMemoryGiB, totalDiskGiB, maxCpuPerSandbox, maxMemoryPerSandbox, maxDiskPerSandbox } =
       capacity
     if (totalCpu < 1 || totalMemoryGiB < 1 || totalDiskGiB < 1) {

@@ -33,7 +33,12 @@ export class InMemoryRepository<T extends Record<string, any>> {
   }
 
   async find(options?: { where?: any; order?: any; take?: number }): Promise<T[]> {
-    let result = this.rows.filter((row) => matchesWhere(row, options?.where))
+    const where = options?.where
+    // TypeORM allows an array of where conditions (OR). Test helpers used by provider specs
+    // rely on that for runner-attributed usage queries.
+    let result = this.rows.filter((row) =>
+      Array.isArray(where) ? where.some((condition) => matchesWhere(row, condition)) : matchesWhere(row, where),
+    )
     if (options?.take !== undefined) {
       result = result.slice(0, options.take)
     }

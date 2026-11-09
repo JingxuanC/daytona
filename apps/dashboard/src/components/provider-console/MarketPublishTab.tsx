@@ -147,8 +147,9 @@ export function MarketPublishTab({ writePermitted }: { writePermitted: boolean }
     }
     try {
       if (editing) {
-        const { regionId: _regionId, ...rest } = payload
-        await update.mutateAsync({ listingId: editing.id, payload: rest })
+        const updatePayload: Partial<typeof payload> = { ...payload }
+        delete updatePayload.regionId
+        await update.mutateAsync({ listingId: editing.id, payload: updatePayload })
         toast.success('上架信息已更新（存量租约价格不变）')
       } else {
         await publish.mutateAsync(payload)

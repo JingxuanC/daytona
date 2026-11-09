@@ -8,7 +8,7 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { In, Repository } from 'typeorm'
 import { MarketBid, MarketBidStatus } from '../entities/market-bid.entity'
 import { MarketListing } from '../entities/market-listing.entity'
-import { MarketListingStatus } from '../enums/market-listing-status.enum'
+import { MarketListingStatus, MarketListingVisibility } from '../enums/market-listing-status.enum'
 import { CreateMarketBidDto, MarketBidDto } from '../dto/market-bid.dto'
 import { MarketLeaseDto } from '../dto/market-lease.dto'
 import { MarketLeasesService } from './market-leases.service'
@@ -29,7 +29,12 @@ export class MarketBidsService {
 
   async create(consumerOrganizationId: string, dto: CreateMarketBidDto): Promise<MarketBidDto> {
     const listing = await this.listingRepository.findOne({ where: { id: dto.listingId } })
-    if (!listing || listing.status !== MarketListingStatus.PUBLISHED) {
+    if (
+      !listing ||
+      listing.status !== MarketListingStatus.PUBLISHED ||
+      (listing.visibility === MarketListingVisibility.PRIVATE &&
+        listing.providerOrganizationId !== consumerOrganizationId)
+    ) {
       throw new NotFoundException('Listing not found')
     }
     if (

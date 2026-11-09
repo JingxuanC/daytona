@@ -15,7 +15,12 @@ describe('ProviderSettlementService (acceptance)', () => {
     const settlementRepository = new InMemoryRepository<any>()
     const lineRepository = new InMemoryRepository<any>()
 
+    const usageLines = [
+      { sandboxId: 'sandbox-1', cpuHours: 1, memoryGiBHours: 2, diskGiBHours: 3, gpuHours: 0 },
+      { sandboxId: 'sandbox-2', cpuHours: 2, memoryGiBHours: 0, diskGiBHours: 0, gpuHours: 0 },
+    ]
     const usageService = {
+      getRunnerUsage: jest.fn(async () => usageLines),
       getSandboxUsage: jest.fn(async () => [
         { sandboxId: 'sandbox-1', cpuHours: 1, memoryGiBHours: 2, diskGiBHours: 3, gpuHours: 0 },
         { sandboxId: 'sandbox-2', cpuHours: 2, memoryGiBHours: 0, diskGiBHours: 0, gpuHours: 0 },
@@ -49,6 +54,7 @@ describe('ProviderSettlementService (acceptance)', () => {
       redisLockProvider as any,
       usageService as any,
       pricingService as any,
+      { getPlatformFeeBps: jest.fn(async () => 0) } as any,
     )
 
     return { service, settlementRepository, lineRepository, usageService, pricingService }
