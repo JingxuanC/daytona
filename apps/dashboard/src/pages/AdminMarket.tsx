@@ -4,7 +4,6 @@
  */
 
 import { PageContent, PageHeader, PageIntro, PageLayout } from '@/components/PageLayout'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -20,8 +19,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useApi } from '@/hooks/useApi'
-import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
 import { getMarketApiErrorMessage } from '@/market-api/client'
 import {
   useAdminMarketTopupMutation,

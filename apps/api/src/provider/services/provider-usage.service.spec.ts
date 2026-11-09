@@ -9,6 +9,11 @@ import { ProviderUsageService } from './provider-usage.service'
 describe('ProviderUsageService (acceptance)', () => {
   const runnerService = {
     findByIds: jest.fn(async (ids: string[]) => ids.map((id) => ({ id, name: `node-${id}` }))),
+    // Provider usage is attributed to the organization's runners (compute market M2).
+    findAllByOrganization: jest.fn(async () => [
+      { id: 'runner-1', name: 'node-runner-1' },
+      { id: 'runner-2', name: 'node-runner-2' },
+    ]),
   }
 
   const createService = (current: Record<string, any>[], archived: Record<string, any>[] = []) => {

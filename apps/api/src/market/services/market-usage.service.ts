@@ -11,7 +11,6 @@ import { SandboxUsagePeriodArchive } from '../../usage/entities/sandbox-usage-pe
 import { SandboxUsagePeriod } from '../../usage/entities/sandbox-usage-period.entity'
 import { MarketLease } from '../entities/market-lease.entity'
 import { MarketListing } from '../entities/market-listing.entity'
-import { MarketLeaseStatus } from '../enums/market-lease-status.enum'
 import { MarketUsageItemDto, MarketUsageQueryDto, MarketUsageResponseDto } from '../dto/market-usage.dto'
 import { formatUtcDay, HOUR_MS, resolveDateRange, round } from '../../provider/utils/date-range.util'
 
@@ -126,7 +125,10 @@ export class MarketUsageService {
 
     for (const [key, bucket] of buckets) {
       const [date, regionId] = key.split('|')
-      const pricing = pricingByRegion.get(regionId)!
+      const pricing = pricingByRegion.get(regionId)
+      if (!pricing) {
+        continue
+      }
       currency = pricing.currency
       const cpuHours = bucket.cpuMs / HOUR_MS
       const memoryGiBHours = bucket.memoryGiBMillis / HOUR_MS
