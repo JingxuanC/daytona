@@ -4,6 +4,7 @@
  */
 
 import { PageContent, PageHeader, PageIntro, PageLayout } from '@/components/PageLayout'
+import { MarketAccountTab } from '@/components/market/MarketAccountTab'
 import { MarketBrowseTab } from '@/components/market/MarketBrowseTab'
 import { MarketUsageTab } from '@/components/market/MarketUsageTab'
 import { MyLeasesTab } from '@/components/market/MyLeasesTab'
@@ -12,7 +13,7 @@ import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
 import { OrganizationRolePermissionsEnum } from '@daytona/api-client'
 import React, { useMemo, useState } from 'react'
 
-type ComputeMarketTab = 'browse' | 'leases' | 'usage'
+type ComputeMarketTab = 'browse' | 'leases' | 'usage' | 'account'
 
 const ComputeMarket: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ComputeMarketTab>('browse')
@@ -35,6 +36,7 @@ const ComputeMarket: React.FC = () => {
             <TabsTrigger value="browse">浏览算力</TabsTrigger>
             <TabsTrigger value="leases">我的租用</TabsTrigger>
             <TabsTrigger value="usage">我的用量</TabsTrigger>
+            <TabsTrigger value="account">账户</TabsTrigger>
           </TabsList>
 
           <TabsContent value="browse" className="flex flex-col gap-3 pt-3">
@@ -45,6 +47,9 @@ const ComputeMarket: React.FC = () => {
           </TabsContent>
           <TabsContent value="usage" className="flex flex-col gap-3 pt-3">
             <MarketUsageTab />
+          </TabsContent>
+          <TabsContent value="account" className="flex flex-col gap-3 pt-3">
+            <MarketAccountTab />
           </TabsContent>
         </Tabs>
       </PageContent>

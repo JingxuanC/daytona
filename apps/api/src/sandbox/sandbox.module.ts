@@ -25,6 +25,7 @@ import { SnapshotRunner } from './entities/snapshot-runner.entity'
 import { DockerRegistry } from '../docker-registry/entities/docker-registry.entity'
 import { RedisLockProvider } from './common/redis-lock.provider'
 import { OrganizationModule } from '../organization/organization.module'
+import { MarketModule } from '../market/market.module'
 import { SandboxWarmPoolService } from './services/sandbox-warm-pool.service'
 import { WarmPool } from './entities/warm-pool.entity'
 import { PreviewController } from './controllers/preview.controller'
@@ -68,6 +69,7 @@ import { SandboxSearchAdapterProvider } from './providers/sandbox-search.provide
     UserModule,
     DockerRegistryModule,
     OrganizationModule,
+    MarketModule,
     RegionModule,
     TypeOrmModule.forFeature([
       Sandbox,

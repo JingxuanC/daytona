@@ -59,6 +59,14 @@ export class SettlementPeriod {
   @Column({ type: 'int', default: 0 })
   amountCents: number
 
+  /** Platform commission on this settlement (compute market M2), in integer cents. */
+  @Column({ type: 'int', default: 0 })
+  platformFeeCents: number
+
+  /** Provider net revenue after platform commission, in integer cents. */
+  @Column({ type: 'int', default: 0 })
+  netCents: number
+
   @Column({ type: 'character varying', default: 'CNY' })
   currency: string
 

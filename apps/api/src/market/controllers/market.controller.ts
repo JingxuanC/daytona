@@ -15,10 +15,19 @@ import { RequiredOrganizationResourcePermissions } from '../../organization/deco
 import { OrganizationResourcePermission } from '../../organization/enums/organization-resource-permission.enum'
 import { OrganizationAuthContextGuard } from '../../organization/guards/organization-auth-context.guard'
 import { MarketLeaseDto, MarketLeasesResponseDto, CreateMarketLeaseDto } from '../dto/market-lease.dto'
-import { MarketListingsResponseDto } from '../dto/market-listing.dto'
+import { MarketListingsQueryDto, MarketListingsResponseDto } from '../dto/market-listing.dto'
+import {
+  MarketChargesQueryDto,
+  MarketChargesResponseDto,
+  MarketCreditEntryDto,
+  MarketCreditResponseDto,
+  MarketUsageChargeDto,
+} from '../dto/market-credit.dto'
 import { MarketUsageQueryDto, MarketUsageResponseDto } from '../dto/market-usage.dto'
 import { MarketLeasesService } from '../services/market-leases.service'
 import { MarketListingsService } from '../services/market-listings.service'
+import { MarketChargingService } from '../services/market-charging.service'
+import { MarketCreditService } from '../services/market-credit.service'
 import { MarketUsageService } from '../services/market-usage.service'
 
 @Controller('market')
@@ -34,6 +43,8 @@ export class MarketController {
     private readonly listingsService: MarketListingsService,
     private readonly leasesService: MarketLeasesService,
     private readonly usageService: MarketUsageService,
+    private readonly creditService: MarketCreditService,
+    private readonly chargingService: MarketChargingService,
   ) {}
 
   @Get('listings')
@@ -45,8 +56,9 @@ export class MarketController {
   @ApiResponse({ status: 200, type: MarketListingsResponseDto })
   async listListings(
     @IsOrganizationAuthContext() authContext: OrganizationAuthContext,
+    @Query() query: MarketListingsQueryDto,
   ): Promise<MarketListingsResponseDto> {
-    const items = await this.listingsService.listPublic(authContext.organizationId)
+    const items = await this.listingsService.listPublic(authContext.organizationId, { sort: query.sort })
     return { items }
   }
 
@@ -111,5 +123,39 @@ export class MarketController {
     @Query() query: MarketUsageQueryDto,
   ): Promise<MarketUsageResponseDto> {
     return this.usageService.getUsage(authContext.organizationId, query)
+  }
+
+  @Get('credit')
+  @ApiOperation({
+    summary: 'Read the organization market credit balance and ledger',
+    operationId: 'getMarketCredit',
+    description: 'Returns the consumer credit balance and the most recent ledger entries (top-ups and usage charges).',
+  })
+  @ApiResponse({ status: 200, type: MarketCreditResponseDto })
+  async getCredit(@IsOrganizationAuthContext() authContext: OrganizationAuthContext): Promise<MarketCreditResponseDto> {
+    const balance = await this.creditService.getBalance(authContext.organizationId)
+    const entries = await this.creditService.listEntries(authContext.organizationId)
+    return {
+      balanceCents: balance.balanceCents,
+      currency: balance.currency,
+      entries: entries.map(MarketCreditEntryDto.fromEntity),
+    }
+  }
+
+  @Get('charges')
+  @ApiOperation({
+    summary: 'List settled market usage charges of the organization',
+    operationId: 'listMarketCharges',
+    description: 'Returns per-lease per-day usage charges with platform commission breakdown.',
+  })
+  @ApiResponse({ status: 200, type: MarketChargesResponseDto })
+  async listCharges(
+    @IsOrganizationAuthContext() authContext: OrganizationAuthContext,
+    @Query() query: MarketChargesQueryDto,
+  ): Promise<MarketChargesResponseDto> {
+    const { items, listingNames } = await this.chargingService.listCharges(authContext.organizationId, query)
+    return {
+      items: items.map((charge) => MarketUsageChargeDto.fromEntity(charge, listingNames.get(charge.listingId))),
+    }
   }
 }

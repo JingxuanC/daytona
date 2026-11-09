@@ -13,6 +13,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Label } from '@/components/ui/label'
 import { Spinner } from '@/components/ui/spinner'
 import {
@@ -27,7 +28,7 @@ import {
 } from '@/components/ui/table'
 import { getMarketApiErrorMessage } from '@/market-api/client'
 import { useMarketListingsQuery, useOpenMarketLeaseMutation } from '@/market-api/queries'
-import type { MarketListing } from '@/market-api/types'
+import type { MarketListing, MarketListingSort } from '@/market-api/types'
 import { RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
@@ -40,7 +41,8 @@ function formatPrice(centsPerHour: number, currency: string): string {
 }
 
 export function MarketBrowseTab({ writePermitted }: { writePermitted: boolean }) {
-  const { data, isLoading, error, refetch, isFetching } = useMarketListingsQuery()
+  const [sort, setSort] = useState<MarketListingSort>('newest')
+  const { data, isLoading, error, refetch, isFetching } = useMarketListingsQuery(sort)
   const openLease = useOpenMarketLeaseMutation()
   const [selected, setSelected] = useState<MarketListing | null>(null)
   const [cpu, setCpu] = useState('')
@@ -74,10 +76,23 @@ export function MarketBrowseTab({ writePermitted }: { writePermitted: boolean })
         <p className="text-sm text-muted-foreground">
           平台上的算力供给（价格来自提供方上架时的定价）。租用后即可在创建沙箱时选择对应 region。
         </p>
-        <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
-          <RefreshCw className="mr-1 size-4" />
-          刷新
-        </Button>
+        <div className="flex items-center gap-2">
+          <Select value={sort} onValueChange={(value) => setSort(value as MarketListingSort)}>
+            <SelectTrigger className="h-8 w-[140px]">
+              <SelectValue placeholder="排序" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="newest">最新上架</SelectItem>
+              <SelectItem value="price_asc">价格从低到高</SelectItem>
+              <SelectItem value="price_desc">价格从高到低</SelectItem>
+              <SelectItem value="capacity_desc">容量优先</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className="mr-1 size-4" />
+            刷新
+          </Button>
+        </div>
       </div>
 
       {error ? (

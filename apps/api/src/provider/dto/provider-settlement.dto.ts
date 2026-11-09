@@ -110,6 +110,12 @@ export class ProviderSettlementItemDto {
   @ApiProperty({ description: 'Settled amount in integer cents', example: 1234 })
   amountCents: number
 
+  @ApiProperty({ description: 'Platform commission in integer cents', example: 123 })
+  platformFeeCents: number
+
+  @ApiProperty({ description: 'Provider net revenue after commission, in integer cents', example: 1111 })
+  netCents: number
+
   @ApiProperty({ description: 'Currency of the settled amount', example: 'CNY' })
   currency: string
 

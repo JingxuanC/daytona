@@ -3,6 +3,8 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
+export type MarketListingSort = 'newest' | 'price_asc' | 'price_desc' | 'capacity_desc'
+
 export type MarketListingStatus = 'draft' | 'pending_approval' | 'published' | 'paused' | 'retired'
 
 export interface MarketListing {
@@ -137,4 +139,50 @@ export interface UpdateMarketListingPayload {
   maxDiskPerSandbox?: number
   maxSandboxes?: number
   status?: MarketListingStatus
+}
+
+export type MarketCreditEntryType = 'topup' | 'charge' | 'refund' | 'adjustment'
+
+export interface MarketCreditEntry {
+  id: string
+  type: MarketCreditEntryType
+  amountCents: number
+  balanceAfterCents: number
+  currency: string
+  description: string | null
+  referenceType: string | null
+  referenceId: string | null
+  createdAt: string
+}
+
+export interface MarketCreditResponse {
+  balanceCents: number
+  currency: string
+  entries: MarketCreditEntry[]
+}
+
+export interface MarketUsageCharge {
+  id: string
+  leaseId: string
+  listingId: string
+  listingName: string | null
+  periodStart: string
+  cpuHours: number
+  memoryGiBHours: number
+  diskGiBHours: number
+  gpuHours: number
+  amountCents: number
+  platformFeeCents: number
+  providerNetCents: number
+  currency: string
+  createdAt: string
+}
+
+export interface MarketChargesResponse {
+  items: MarketUsageCharge[]
+}
+
+export interface MarketChargesQuery {
+  from?: string
+  to?: string
 }

@@ -54,6 +54,8 @@ import { SandboxStartedEvent } from '../events/sandbox-started.event'
 import { SandboxStoppedEvent } from '../events/sandbox-stopped.event'
 import { SandboxArchivedEvent } from '../events/sandbox-archived.event'
 import { OrganizationService } from '../../organization/services/organization.service'
+import { MarketCreditService } from '../../market/services/market-credit.service'
+import { MarketLeasesService } from '../../market/services/market-leases.service'
 import { OrganizationEvents } from '../../organization/constants/organization-events.constant'
 import { OrganizationSuspendedSandboxStoppedEvent } from '../../organization/events/organization-suspended-sandbox-stopped.event'
 import { TypedConfigService } from '../../config/typed-config.service'
@@ -142,6 +144,8 @@ export class SandboxService {
     private readonly warmPoolService: SandboxWarmPoolService,
     private readonly eventEmitter: EventEmitter2,
     private readonly organizationService: OrganizationService,
+    private readonly marketLeasesService: MarketLeasesService,
+    private readonly marketCreditService: MarketCreditService,
     private readonly runnerAdapterFactory: RunnerAdapterFactory,
     private readonly organizationUsageService: OrganizationUsageService,
     private readonly redisLockProvider: RedisLockProvider,
@@ -466,6 +470,7 @@ export class SandboxService {
     let sandboxClass: SandboxClass | undefined
 
     const region = await this.getValidatedOrDefaultRegion(organization, createSandboxDto.target)
+    await this.assertMarketBalance(organization, region)
 
     try {
       let snapshotIdOrName = createSandboxDto.snapshot
@@ -855,6 +860,7 @@ export class SandboxService {
     let gpuRunnerAssignmentLockKey: string | undefined
 
     const region = await this.getValidatedOrDefaultRegion(organization, createSandboxDto.target)
+    await this.assertMarketBalance(organization, region)
 
     try {
       const cpu = createSandboxDto.cpu || DEFAULT_CPU
@@ -2806,6 +2812,24 @@ export class SandboxService {
     }
 
     return region.proxyUrl + '/sandboxes/' + sandbox.id + '/build-logs'
+  }
+
+  /**
+   * Market regions are owned by another organization. When the caller holds a market lease on
+   * that region, require a positive credit balance before creating a new sandbox (M2/M3).
+   */
+  private async assertMarketBalance(organization: Organization, region: Region): Promise<void> {
+    if (!region.organizationId || region.organizationId === organization.id) {
+      return
+    }
+    const activeLease = await this.marketLeasesService.findActiveLeaseForRegion(organization.id, region.id)
+    if (!activeLease) {
+      return
+    }
+    const balance = await this.marketCreditService.getBalance(organization.id)
+    if (balance.balanceCents <= 0) {
+      throw new ForbiddenException('Insufficient market balance: top up before creating sandboxes on a market region')
+    }
   }
 
   private async getValidatedOrDefaultRegion(organization: Organization, regionIdOrName?: string): Promise<Region> {

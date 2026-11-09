@@ -26,6 +26,7 @@ import { SettlementSandboxLine } from '../entities/settlement-sandbox-line.entit
 import { SettlementPeriod, SettlementStatus } from '../entities/settlement-period.entity'
 import { DAY_MS, formatUtcDay, resolveDateRange, round } from '../utils/date-range.util'
 import { computeAmountCents } from '../utils/pricing.util'
+import { platformFeeBpsFromEnv } from '../../common/utils/platform-fee'
 import { ProviderPricingService } from './provider-pricing.service'
 import { ProviderUsageService } from './provider-usage.service'
 
@@ -163,12 +164,17 @@ export class ProviderSettlementService implements TrackableJobExecutions, OnAppl
           periodEnd: dayLabel,
         })
 
+      const feeBps = platformFeeBpsFromEnv()
+      const platformFeeCents = Math.round((totals.amountCents * feeBps) / 10_000)
+
       period.status = SettlementStatus.PENDING
       period.cpuHours = round(totals.cpuHours)
       period.memoryGiBHours = round(totals.memoryGiBHours)
       period.diskGiBHours = round(totals.diskGiBHours)
       period.gpuHours = round(totals.gpuHours)
       period.amountCents = totals.amountCents
+      period.platformFeeCents = platformFeeCents
+      period.netCents = totals.amountCents - platformFeeCents
       period.currency = pricing.currency
 
       const saved = await this.settlementRepository.save(period)
@@ -383,6 +389,8 @@ export class ProviderSettlementService implements TrackableJobExecutions, OnAppl
       diskGiBHours: settlement.diskGiBHours,
       gpuHours: settlement.gpuHours,
       amountCents: settlement.amountCents,
+      platformFeeCents: settlement.platformFeeCents,
+      netCents: settlement.netCents,
       currency: settlement.currency,
       settledAt: settlement.settledAt?.toISOString() ?? null,
       withdrawnAt: settlement.withdrawnAt?.toISOString() ?? null,

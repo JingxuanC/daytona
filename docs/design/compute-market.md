@@ -142,3 +142,48 @@
 - 竞价/价格排序/抢占/SLA/评价（M3）
 - 平台审批流（`MARKET_REQUIRE_PROVIDER_APPROVAL` 默认 false；true 时 listing 进 `pending_approval`，M1 仅预留状态，不做审批 UI）
 - 专用 `MARKET` region 类型（M2 视需要再引入；M1 用 CUSTOM+quota 已满足语义）
+
+---
+
+## 8. M2 实现（计费闭环，已落地）
+
+### 8.1 数据模型
+
+| 表 | 说明 |
+|---|---|
+| `market_credit_entries` | 消费方信用账本（append-only）：`type=topup/charge/refund/adjustment`，`amountCents` 带符号，`balanceAfterCents` 冗余余额；`(organizationId, referenceId) WHERE referenceType='market_usage'` 唯一索引保证扣费幂等 |
+| `market_usage_charges` | 每租约每 UTC 日的扣费记录：用量、金额、平台费、提供方净收益；`(leaseId, periodStart)` 唯一 |
+| `settlement_periods` 新列 | `platformFeeCents`（平台抽成）、`netCents`（提供方净收益） |
+
+### 8.2 流程
+
+1. **充值**：自托管 M2 无支付通道，平台管理员调用
+   `POST /api/admin/market/credits/topup { organizationId, amountCents, description }`
+2. **余额约束**：
+   - 开租约要求余额 ≥ 所租容量的 **1 小时费用**（防止零余额白嫖）
+   - 在市场 region（他人拥有、持有有效租约）创建沙箱时要求余额 > 0
+3. **扣费**：`@Cron('0 30 1 * * *')` 对前一个 UTC 日按租约价格快照 × 用量扣费；
+   手工重算：`POST /api/admin/market/charges/recompute { day }`（幂等）
+4. **平台抽成**：`MARKET_PLATFORM_FEE_BPS`（0–10000，默认 0）在生成 provider 结算单时计算
+   `platformFeeCents`，`netCents = amountCents - platformFeeCents`；扣费记录里同样记录
+5. **消费方 API**：`GET /api/market/credit`（余额 + 流水）、`GET /api/market/charges`（扣费明细）
+6. **运营端点**：`GET /api/admin/market/overview`（listings 状态分布、活跃租约、扣费/抽成合计、负余额组织）
+7. **Dashboard**：算力市场新增「账户」tab（余额/流水/扣费明细）；控制台结算单新增「净收益」列
+
+### 8.3 已知限制
+
+- 账本乐观并发按组织串行（单 API 实例假设；多实例需改为数据库行锁或串行化事务）
+- 负余额不自动停机（M3 只阻止新租约/新沙箱），存量沙箱按现有配额继续运行
+- 无退款/对账 UI；对账以 `market_usage_charges` 与 `settlement_periods` 为准
+
+## 9. M3 实现（市场机制，已落地）
+
+| 能力 | 实现 |
+|---|---|
+| 浏览排序 | `GET /api/market/listings?sort=newest|price_asc|price_desc|capacity_desc`；Dashboard 浏览页排序选择器（价格 = vCPU + 内存 + 磁盘单价之和） |
+| 平台抽成可配 | `MARKET_PLATFORM_FEE_BPS` 环境变量（0–10000，非法值回退 0） |
+| 余额约束 | 租约开租 1 小时费用门槛 + 市场 region 沙箱创建余额 > 0 校验 |
+| 运营视图/告警 | `GET /api/admin/market/overview`：listing 状态分布、活跃租约、扣费与抽成合计、负余额组织列表 |
+| 验收 | `scripts/accept-compute-market.sh` 扩展 M2/M3：充值 → 租用 → 跨组织沙箱 → 排序断言 → 运营概览 → 扣费/账本/抽成断言 → 关租约回收 → 清理（25 项检查） |
+
+未做（后续方向）：信誉排序（需要跨组织暴露节点可用性指标）、竞价/抢占、SLA 赔付、退款/对账 UI、多实例账本并发。
