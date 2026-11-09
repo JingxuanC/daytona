@@ -2832,6 +2832,17 @@ export class SandboxService {
       throw new NotFoundException('Region not found')
     }
 
+    // Explicit targets must be entitled to the organization: own region, shared/dedicated region
+    // with a quota, or a compute-market region where the organization holds a lease quota.
+    // Mirrors snapshot.service.getValidatedOrDefaultRegion.
+    const availableRegions = await this.organizationService.listAvailableRegions(organization.id)
+    if (!availableRegions.some((availableRegion) => availableRegion.id === region.id)) {
+      if (region.regionType === RegionType.SHARED) {
+        throw new ForbiddenException(`Region ${region.id} is not available to the organization`)
+      }
+      throw new NotFoundException('Region not found')
+    }
+
     return region
   }
 

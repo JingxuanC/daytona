@@ -408,6 +408,7 @@ const router = createBrowserRouter([
               },
             ],
           },
+          { path: getRouteSubPath(RoutePath.MARKET), lazy: lazyRoutes.ComputeMarket },
           { path: getRouteSubPath(RoutePath.ACCOUNT_SETTINGS), lazy: lazyRoutes.AccountSettings },
           { path: getRouteSubPath(RoutePath.USER_INVITATIONS), lazy: lazyRoutes.UserOrganizationInvitations },
           { path: getRouteSubPath(RoutePath.ONBOARDING), lazy: lazyRoutes.Onboarding },

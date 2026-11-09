@@ -47,6 +47,7 @@ import { AdminModule } from './admin/admin.module'
 import { ClickHouseModule } from './clickhouse/clickhouse.module'
 import { SandboxTelemetryModule } from './sandbox-telemetry/sandbox-telemetry.module'
 import { ProviderModule } from './provider/provider.module'
+import { MarketModule } from './market/market.module'
 
 @Module({
   imports: [
@@ -190,6 +191,7 @@ import { ProviderModule } from './provider/provider.module'
     RegionModule,
     AdminModule,
     ProviderModule,
+    MarketModule,
     EmailModule.forRootAsync({
       inject: [TypedConfigService],
       useFactory: (configService: TypedConfigService) => {

@@ -112,10 +112,10 @@ export class ProviderSettlementService implements TrackableJobExecutions, OnAppl
         continue
       }
 
-      const sandboxUsage = await this.providerUsageService.getSandboxUsage(target.organizationId, {
+      // Node-owned usage: includes sandboxes created by market consumers on this runner.
+      const sandboxUsage = await this.providerUsageService.getRunnerUsage(target.runnerId, {
         from: dayLabel,
         to: dayLabel,
-        runnerId: target.runnerId,
       })
 
       if (sandboxUsage.length === 0) {

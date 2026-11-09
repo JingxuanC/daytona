@@ -382,6 +382,15 @@ export class OrganizationService implements OnModuleInit, TrackableJobExecutions
           organizationId,
         },
       )
+      // Compute market: a CUSTOM region owned by another organization becomes available once
+      // this organization holds a region quota on it (granted by opening a market lease).
+      .orWhere(
+        'region."regionType" = :customRegionType AND EXISTS (SELECT 1 FROM region_quota rq WHERE rq."regionId" = region."id" AND rq."organizationId" = :organizationId)',
+        {
+          customRegionType: RegionType.CUSTOM,
+          organizationId,
+        },
+      )
       .orderBy(
         `CASE region."regionType" 
           WHEN '${RegionType.CUSTOM}' THEN 1 
