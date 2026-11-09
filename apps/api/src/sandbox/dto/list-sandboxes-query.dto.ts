@@ -132,6 +132,16 @@ export class ListSandboxesQueryDto {
   regionIds?: string[]
 
   @ApiProperty({
+    name: 'runnerId',
+    description: 'Filter by the ID of the runner the sandbox is running on',
+    required: false,
+    type: String,
+  })
+  @IsOptional()
+  @IsString()
+  runnerId?: string
+
+  @ApiProperty({
     name: 'sandboxClasses',
     description: 'List of sandbox classes to filter by',
     required: false,

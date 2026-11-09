@@ -53,6 +53,13 @@ export class SandboxUsagePeriod {
   @Column()
   region: string
 
+  /**
+   * Runner (compute node) that served this usage period.
+   * Used to attribute usage and revenue to the node owner.
+   */
+  @Column({ type: 'character varying', nullable: true })
+  runnerId: string | null
+
   @Column({
     type: 'character varying',
     default: SandboxClass.CONTAINER,
@@ -74,6 +81,7 @@ export class SandboxUsagePeriod {
     usagePeriodEntity.mem = usagePeriod.mem
     usagePeriodEntity.disk = usagePeriod.disk
     usagePeriodEntity.region = usagePeriod.region
+    usagePeriodEntity.runnerId = usagePeriod.runnerId
     usagePeriodEntity.sandboxClass = usagePeriod.sandboxClass
     usagePeriodEntity.regionType = usagePeriod.regionType
     return usagePeriodEntity

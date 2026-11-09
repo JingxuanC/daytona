@@ -158,6 +158,30 @@ export class Runner {
   })
   lastChecked: Date
 
+  /**
+   * Round trip time of the last control plane latency probe, in milliseconds.
+   * Only maintained for runners that expose an apiUrl.
+   */
+  @Column({
+    nullable: true,
+    type: 'float',
+  })
+  lastRttMs: number | null
+
+  @Column({
+    nullable: true,
+    type: 'timestamp with time zone',
+  })
+  lastRttAt: Date | null
+
+  /**
+   * Number of consecutive failed latency probes. Reset to zero on a successful probe.
+   */
+  @Column({
+    default: 0,
+  })
+  consecutiveHealthFailures: number
+
   @Column({
     default: false,
   })

@@ -47,6 +47,10 @@ export interface SandboxSearchFilters {
    */
   regionIds?: string[]
   /**
+   * Filter by runner ID
+   */
+  runnerId?: string
+  /**
    * Filter by sandbox classes
    */
   sandboxClasses?: SandboxClass[]
