@@ -17,7 +17,12 @@ import { MarketListing } from '../entities/market-listing.entity'
 import { MarketLease } from '../entities/market-lease.entity'
 import { MarketLeaseStatus } from '../enums/market-lease-status.enum'
 import { MarketListingStatus, MarketListingVisibility } from '../enums/market-listing-status.enum'
-import { CreateMarketListingDto, MarketListingDto, UpdateMarketListingDto } from '../dto/market-listing.dto'
+import {
+  CreateMarketListingDto,
+  MarketListingDto,
+  MarketListingSort,
+  UpdateMarketListingDto,
+} from '../dto/market-listing.dto'
 
 @Injectable()
 export class MarketListingsService {
@@ -39,7 +44,10 @@ export class MarketListingsService {
     private readonly configService: TypedConfigService,
   ) {}
 
-  async listPublic(consumerOrganizationId?: string): Promise<MarketListingDto[]> {
+  async listPublic(
+    consumerOrganizationId?: string,
+    options: { sort?: MarketListingSort } = {},
+  ): Promise<MarketListingDto[]> {
     const listings = await this.listingRepository.find({
       where: { status: MarketListingStatus.PUBLISHED, visibility: MarketListingVisibility.PUBLIC },
       order: { createdAt: 'DESC' },
@@ -55,7 +63,23 @@ export class MarketListingsService {
         }
       }
     }
-    return this.toDtos(listings)
+    return this.toDtos(this.sortListings(listings, options.sort))
+  }
+
+  private sortListings(listings: MarketListing[], sort: MarketListingSort = 'newest'): MarketListing[] {
+    const hourlyPrice = (listing: MarketListing) =>
+      listing.cpuHourCents + listing.memoryGiBHourCents + listing.diskGiBHourCents
+
+    switch (sort) {
+      case 'price_asc':
+        return [...listings].sort((a, b) => hourlyPrice(a) - hourlyPrice(b))
+      case 'price_desc':
+        return [...listings].sort((a, b) => hourlyPrice(b) - hourlyPrice(a))
+      case 'capacity_desc':
+        return [...listings].sort((a, b) => b.totalCpu - a.totalCpu)
+      default:
+        return [...listings].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+    }
   }
 
   async listForProvider(organizationId: string): Promise<MarketListingDto[]> {

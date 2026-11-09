@@ -5,9 +5,13 @@
 
 import axios, { type AxiosInstance } from 'axios'
 import type {
+  MarketChargesQuery,
+  MarketChargesResponse,
+  MarketCreditResponse,
   MarketLease,
   MarketLeasesResponse,
   MarketListingsResponse,
+  MarketListingSort,
   MarketUsageQuery,
   MarketUsageResponse,
   OpenMarketLeasePayload,
@@ -66,8 +70,10 @@ export class MarketApiClient {
     })
   }
 
-  async listListings(): Promise<MarketListingsResponse> {
-    const { data } = await this.http.get<MarketListingsResponse>('/market/listings')
+  async listListings(sort?: MarketListingSort): Promise<MarketListingsResponse> {
+    const { data } = await this.http.get<MarketListingsResponse>('/market/listings', {
+      params: { sort },
+    })
     return data
   }
 
@@ -83,6 +89,18 @@ export class MarketApiClient {
 
   async closeLease(leaseId: string): Promise<MarketLease> {
     const { data } = await this.http.post<MarketLease>(`/market/leases/${encodeURIComponent(leaseId)}/close`)
+    return data
+  }
+
+  async getCredit(): Promise<MarketCreditResponse> {
+    const { data } = await this.http.get<MarketCreditResponse>('/market/credit')
+    return data
+  }
+
+  async listCharges(query: MarketChargesQuery): Promise<MarketChargesResponse> {
+    const { data } = await this.http.get<MarketChargesResponse>('/market/charges', {
+      params: { from: query.from, to: query.to },
+    })
     return data
   }
 

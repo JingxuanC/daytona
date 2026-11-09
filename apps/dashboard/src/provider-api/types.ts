@@ -184,6 +184,8 @@ export interface ProviderSettlement {
   diskGiBHours: number
   gpuHours: number
   amountCents: number
+  platformFeeCents: number
+  netCents: number
   currency: string
   settledAt: string | null
   /** 实际提现时间 */

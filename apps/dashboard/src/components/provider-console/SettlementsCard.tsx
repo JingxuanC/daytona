@@ -47,7 +47,7 @@ import {
   formatNumber,
 } from './shared'
 
-const SETTLEMENT_TABLE_COLUMNS = 10
+const SETTLEMENT_TABLE_COLUMNS = 11
 
 type SettlementStatusFilter = 'ALL' | Extract<ProviderSettlementStatus, 'PENDING' | 'SETTLED' | 'WITHDRAWN'>
 
@@ -93,9 +93,10 @@ export function SettlementsCard({ isOwner }: { isOwner: boolean }) {
         acc.diskGiBHours += settlement.diskGiBHours ?? 0
         acc.gpuHours += settlement.gpuHours ?? 0
         acc.amountCents += settlement.amountCents ?? 0
+        acc.netCents += settlement.netCents ?? settlement.amountCents ?? 0
         return acc
       },
-      { cpuHours: 0, memoryGiBHours: 0, diskGiBHours: 0, gpuHours: 0, amountCents: 0 },
+      { cpuHours: 0, memoryGiBHours: 0, diskGiBHours: 0, gpuHours: 0, amountCents: 0, netCents: 0 },
     )
   }, [settlements])
 
@@ -125,10 +126,7 @@ export function SettlementsCard({ isOwner }: { isOwner: boolean }) {
           <span className="text-xs text-muted-foreground">按天生成，平台结算后可提现</span>
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-2">
-          <Select
-            value={statusFilter}
-            onValueChange={(value) => setStatusFilter(value as SettlementStatusFilter)}
-          >
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as SettlementStatusFilter)}>
             <SelectTrigger size="sm" className="w-[132px]">
               <SelectValue placeholder="全部状态" />
             </SelectTrigger>
@@ -163,6 +161,7 @@ export function SettlementsCard({ isOwner }: { isOwner: boolean }) {
               <TableHead className="text-right">磁盘 GiB·时</TableHead>
               <TableHead className="text-right">GPU·时</TableHead>
               <TableHead className="text-right">金额</TableHead>
+              <TableHead className="text-right">净收益</TableHead>
               <TableHead>状态</TableHead>
               <TableHead>结算时间</TableHead>
               <TableHead className="text-right">操作</TableHead>
@@ -219,13 +218,14 @@ export function SettlementsCard({ isOwner }: { isOwner: boolean }) {
                       </div>
                     </TableCell>
                     <TableCell className="text-right tabular-nums">{formatNumber(settlement.cpuHours)}</TableCell>
-                    <TableCell className="text-right tabular-nums">
-                      {formatNumber(settlement.memoryGiBHours)}
-                    </TableCell>
+                    <TableCell className="text-right tabular-nums">{formatNumber(settlement.memoryGiBHours)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatNumber(settlement.diskGiBHours)}</TableCell>
                     <TableCell className="text-right tabular-nums">{formatNumber(settlement.gpuHours)}</TableCell>
                     <TableCell className="text-right tabular-nums">
                       {formatCents(settlement.amountCents, settlement.currency ?? currency)}
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {formatCents(settlement.netCents ?? settlement.amountCents, settlement.currency ?? currency)}
                     </TableCell>
                     <TableCell>
                       <SettlementStatusBadge status={settlement.status} />
@@ -272,6 +272,9 @@ export function SettlementsCard({ isOwner }: { isOwner: boolean }) {
                 <TableCell className="text-right font-medium tabular-nums">
                   {formatCents(totals.amountCents, currency)}
                 </TableCell>
+                <TableCell className="text-right font-medium tabular-nums">
+                  {formatCents(totals.netCents, currency)}
+                </TableCell>
                 <TableCell colSpan={3} />
               </TableRow>
             </TableFooter>
@@ -279,10 +282,7 @@ export function SettlementsCard({ isOwner }: { isOwner: boolean }) {
         </Table>
       </TableContainer>
 
-      <SettlementDetailDialog
-        settlementId={detailSettlementId}
-        onClose={() => setDetailSettlementId(null)}
-      />
+      <SettlementDetailDialog settlementId={detailSettlementId} onClose={() => setDetailSettlementId(null)} />
 
       <Dialog
         open={Boolean(actionState)}
@@ -314,11 +314,7 @@ export function SettlementsCard({ isOwner }: { isOwner: boolean }) {
                 取消
               </Button>
             </DialogClose>
-            <Button
-              type="button"
-              onClick={() => void handleConfirmAction()}
-              disabled={Boolean(updatingSettlementId)}
-            >
+            <Button type="button" onClick={() => void handleConfirmAction()} disabled={Boolean(updatingSettlementId)}>
               {updatingSettlementId ? <Spinner /> : null}
               确认
             </Button>
@@ -329,13 +325,7 @@ export function SettlementsCard({ isOwner }: { isOwner: boolean }) {
   )
 }
 
-function SettlementDetailDialog({
-  settlementId,
-  onClose,
-}: {
-  settlementId: string | null
-  onClose: () => void
-}) {
+function SettlementDetailDialog({ settlementId, onClose }: { settlementId: string | null; onClose: () => void }) {
   const detailQuery = useProviderSettlementQuery(settlementId)
   const detail = detailQuery.data
   const lines = detail?.lines ?? []
@@ -414,9 +404,7 @@ function SettlementDetailDialog({
         <DialogHeader>
           <DialogTitle>结算明细</DialogTitle>
           <DialogDescription>
-            {detail
-              ? `${detail.runnerName} · ${detail.periodStart} ~ ${detail.periodEnd}`
-              : '按沙箱拆分的用量与金额。'}
+            {detail ? `${detail.runnerName} · ${detail.periodStart} ~ ${detail.periodEnd}` : '按沙箱拆分的用量与金额。'}
           </DialogDescription>
         </DialogHeader>
         {renderContent()}

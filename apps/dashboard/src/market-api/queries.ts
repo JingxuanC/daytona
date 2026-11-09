@@ -10,7 +10,11 @@ import { useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { MarketApiClient } from './client'
 import type {
+  MarketChargesQuery,
+  MarketChargesResponse,
+  MarketCreditResponse,
   MarketLeasesResponse,
+  MarketListingSort,
   MarketListingsResponse,
   MarketUsageQuery,
   MarketUsageResponse,
@@ -21,8 +25,12 @@ import type {
 
 export const marketQueryKeys = {
   all: ['market'] as const,
-  listings: (organizationId: string) => [...marketQueryKeys.all, organizationId, 'listings'] as const,
+  listings: (organizationId: string, sort: MarketListingSort = 'newest') =>
+    [...marketQueryKeys.all, organizationId, 'listings', sort] as const,
   leases: (organizationId: string) => [...marketQueryKeys.all, organizationId, 'leases'] as const,
+  credit: (organizationId: string) => [...marketQueryKeys.all, organizationId, 'credit'] as const,
+  charges: (organizationId: string, query: MarketChargesQuery | null) =>
+    [...marketQueryKeys.all, organizationId, 'charges', query] as const,
   usage: (organizationId: string, query: MarketUsageQuery | null) =>
     [...marketQueryKeys.all, organizationId, 'usage', query] as const,
   providerListings: (organizationId: string) =>
@@ -68,12 +76,12 @@ function useMarketScope(): MarketScope {
   }
 }
 
-export function useMarketListingsQuery() {
+export function useMarketListingsQuery(sort: MarketListingSort = 'newest') {
   const { api, organizationId, enabled } = useMarketScope()
 
   return useQuery<MarketListingsResponse>({
-    queryKey: marketQueryKeys.listings(organizationId),
-    queryFn: () => api.listListings(),
+    queryKey: marketQueryKeys.listings(organizationId, sort),
+    queryFn: () => api.listListings(sort),
     enabled,
     staleTime: 15_000,
     refetchInterval: 30_000,
@@ -102,6 +110,34 @@ export function useMarketUsageQuery(query: MarketUsageQuery | null) {
         throw new Error('Missing market usage query')
       }
       return api.getUsage(query)
+    },
+    enabled: enabled && Boolean(query?.from && query?.to),
+    staleTime: 30_000,
+  })
+}
+
+export function useMarketCreditQuery() {
+  const { api, organizationId, enabled } = useMarketScope()
+
+  return useQuery<MarketCreditResponse>({
+    queryKey: marketQueryKeys.credit(organizationId),
+    queryFn: () => api.getCredit(),
+    enabled,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useMarketChargesQuery(query: MarketChargesQuery | null) {
+  const { api, organizationId, enabled } = useMarketScope()
+
+  return useQuery<MarketChargesResponse>({
+    queryKey: marketQueryKeys.charges(organizationId, query),
+    queryFn: () => {
+      if (!query) {
+        throw new Error('Missing market charges query')
+      }
+      return api.listCharges(query)
     },
     enabled: enabled && Boolean(query?.from && query?.to),
     staleTime: 30_000,

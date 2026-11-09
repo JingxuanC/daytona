@@ -59,6 +59,19 @@ print("" if data is None else data)
 ' "$1"
 }
 
+delete_snapshot_and_wait() {
+  local sid
+  sid=$(psql_db "SELECT id FROM snapshot WHERE name='$SNAPSHOT_NAME' AND \"organizationId\"='$CONSUMER_ORG' LIMIT 1")
+  if [ -n "$sid" ]; then
+    curl -s -X DELETE "$API/snapshots/$sid" -H "Authorization: Bearer $ADMIN_KEY" >/dev/null || true
+  fi
+  for _ in $(seq 1 25); do
+    [ -z "$(psql_db "SELECT id FROM snapshot WHERE name='$SNAPSHOT_NAME' AND \"organizationId\"='$CONSUMER_ORG' LIMIT 1")" ] && return 0
+    sleep 2
+  done
+  return 0
+}
+
 # ---------- 0. 健康检查 & 解析 provider / consumer ----------
 info "0. 环境检查"
 HTTP=$(curl -s -o /dev/null -w '%{http_code}' "$API/config")
@@ -84,12 +97,20 @@ ok "provider key 已签发"
 
 # ---------- 2. 清理上一次运行的残留 ----------
 info "2. 清理上一次运行的残留"
-SNAP_ID=$(psql_db "SELECT id FROM snapshot WHERE name='$SNAPSHOT_NAME' AND \"organizationId\"='$CONSUMER_ORG' LIMIT 1")
-[ -n "$SNAP_ID" ] && curl -s -X DELETE "$API/snapshots/$SNAP_ID" -H "Authorization: Bearer $ADMIN_KEY" >/dev/null || true
+delete_snapshot_and_wait
 for STALE_ID in $(psql_db "SELECT id FROM sandbox WHERE \"organizationId\"='$CONSUMER_ORG' AND \"snapshot\"='$SNAPSHOT_NAME' AND state <> 'destroyed'"); do
   curl -s -X DELETE "$API/sandbox/$STALE_ID" -H "Authorization: Bearer $ADMIN_KEY" >/dev/null || true
 done
+for _ in $(seq 1 15); do
+  LEFT=$(psql_db "SELECT count(*) FROM sandbox WHERE \"organizationId\"='$CONSUMER_ORG' AND \"snapshot\"='$SNAPSHOT_NAME' AND state <> 'destroyed'")
+  [ "${LEFT:-0}" = "0" ] && break
+  sleep 2
+done
 psql_db "UPDATE sandbox SET state='destroyed', \"desiredState\"='destroyed' WHERE \"organizationId\"='$CONSUMER_ORG' AND \"snapshot\"='$SNAPSHOT_NAME' AND state <> 'destroyed'" >/dev/null || true
+psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG' AND \"referenceId\" IN (SELECT id::text FROM market_usage_charges WHERE \"consumerOrganizationId\"='$CONSUMER_ORG')" >/dev/null || true
+psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG' AND \"description\"='E2E topup'" >/dev/null || true
+psql_db "DELETE FROM market_usage_charges WHERE \"consumerOrganizationId\"='$CONSUMER_ORG'" >/dev/null || true
+psql_db "DELETE FROM market_leases WHERE \"consumerOrganizationId\"='$CONSUMER_ORG' AND \"listingId\"::text NOT IN (SELECT id::text FROM market_listings)" >/dev/null || true
 ok "旧测试数据已清理"
 
 # ---------- 3. provider 上架 ----------
@@ -98,6 +119,11 @@ LISTING_RESP=$(api POST /provider/market/listings "$PROVIDER_KEY" "{\"regionId\"
 LISTING_ID=$(echo "$LISTING_RESP" | head -1 | json_get id)
 [ -n "$LISTING_ID" ] || { fail "上架失败：$LISTING_RESP"; exit 1; }
 ok "listingId=$LISTING_ID"
+
+info "3.5. M2：为 consumer 充值 1000 分并校验余额"
+TOPUP=$(api POST /admin/market/credits/topup "$ADMIN_KEY" "{\"organizationId\":\"$CONSUMER_ORG\",\"amountCents\":1000,\"description\":\"E2E topup\"}")
+BALANCE=$(echo "$TOPUP" | head -1 | json_get balanceCents)
+[ "${BALANCE:-0}" = "1000" ] && ok "余额已充值：$BALANCE 分" || fail "充值失败：$TOPUP"
 
 # ---------- 4. consumer 浏览 + 租用 ----------
 info "4. consumer 浏览并租用 4c/8GiB/20GiB"
@@ -113,8 +139,27 @@ info "5. consumer 可用 regions 包含该 market region"
 REGIONS=$(api GET /regions "$ADMIN_KEY")
 if echo "$REGIONS" | head -1 | grep -q "$REGION_ID"; then ok "region 已可见"; else fail "available regions 里没有 ${REGION_ID}：$REGIONS"; fi
 
+info "5.5. M3：排序 + 平台运营视图"
+SORTED=$(api GET "/market/listings?sort=price_asc" "$ADMIN_KEY" | head -1)
+SORT_OK=$(echo "$SORTED" | python3 -c '
+import json, sys
+items = json.load(sys.stdin).get("items", [])
+prices = [i["cpuHourCents"] + i["memoryGiBHourCents"] + i["diskGiBHourCents"] for i in items]
+print("1" if prices == sorted(prices) else "0")
+')
+[ "$SORT_OK" = "1" ] && ok "price_asc 排序正确" || fail "price_asc 排序异常：$SORTED"
+OVERVIEW=$(api GET /admin/market/overview "$ADMIN_KEY")
+echo "$OVERVIEW" | head -1 | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+assert "listings" in d and "activeLeases" in d and "charges" in d and "negativeBalanceOrganizations" in d, d
+assert d["activeLeases"] >= 1, d
+print("1")
+' >/dev/null && ok "运营概览端点正常（activeLeases>=1）" || fail "运营概览异常：$OVERVIEW"
+
 # ---------- 6. consumer 建快照 + 沙箱（target=market region） ----------
 info "6. consumer 在 market region 建快照"
+delete_snapshot_and_wait
 api POST /snapshots "$ADMIN_KEY" "{\"name\":\"$SNAPSHOT_NAME\",\"imageName\":\"ubuntu:24.04\",\"regionId\":\"$REGION_ID\",\"cpu\":1,\"memory\":1,\"disk\":3,\"entrypoint\":[\"sleep\",\"infinity\"]}" >/dev/null
 SNAP_STATE=""
 for _ in $(seq 1 40); do
@@ -155,7 +200,23 @@ SETTLED=$(echo "$RECOMPUTE" | head -1 | json_get settled)
 SETTLEMENT_AMOUNT=$(api GET "/provider/settlements?from=$TODAY&to=$TODAY&runnerId=$READY_RUNNER" "$PROVIDER_KEY" | head -1 | json_get items.0.amountCents)
 [ "${SETTLEMENT_AMOUNT:-0}" -gt 0 ] && ok "provider 结算单金额=${SETTLEMENT_AMOUNT} 分" || fail "provider 结算单金额为 0"
 
-# ---------- 9. 关租约后拒绝新沙箱 ----------
+info "8.5. M2：扣费任务 + 账本 + 抽成校验"
+CHARGED=$(api POST /admin/market/charges/recompute "$ADMIN_KEY" "{\"day\":\"$TODAY\"}" | head -1 | json_get charged)
+[ "${CHARGED:-0}" -ge 1 ] && ok "扣费任务执行（$CHARGED 个租约）" || fail "扣费任务未产生扣费：$CHARGED"
+CHARGE_AMOUNT=$(api GET "/market/charges?from=$TODAY&to=$TODAY" "$ADMIN_KEY" | head -1 | json_get items.0.amountCents)
+CHARGE_FEE=$(api GET "/market/charges?from=$TODAY&to=$TODAY" "$ADMIN_KEY" | head -1 | json_get items.0.platformFeeCents)
+CHARGE_NET=$(api GET "/market/charges?from=$TODAY&to=$TODAY" "$ADMIN_KEY" | head -1 | json_get items.0.providerNetCents)
+[ "${CHARGE_AMOUNT:-0}" -gt 0 ] && ok "扣费金额=$CHARGE_AMOUNT 分（平台费 $CHARGE_FEE / 净收益 ${CHARGE_NET}）" || fail "扣费金额为 0"
+[ "$(( CHARGE_FEE + CHARGE_NET ))" = "$CHARGE_AMOUNT" ] && ok "扣费拆分正确：平台费 + 净收益 = 扣费金额" || fail "扣费拆分不一致"
+BALANCE_AFTER=$(api GET /market/credit "$ADMIN_KEY" | head -1 | json_get balanceCents)
+EXPECTED_BALANCE=$((1000 - CHARGE_AMOUNT))
+[ "${BALANCE_AFTER:-0}" = "$EXPECTED_BALANCE" ] && ok "账本余额正确：$BALANCE_AFTER 分" || fail "账本余额异常：${BALANCE_AFTER}（期望 ${EXPECTED_BALANCE}）"
+SETTLE_FEE=$(api GET "/provider/settlements?from=$TODAY&to=$TODAY&runnerId=$READY_RUNNER" "$PROVIDER_KEY" | head -1 | json_get items.0.platformFeeCents)
+SETTLE_NET=$(api GET "/provider/settlements?from=$TODAY&to=$TODAY&runnerId=$READY_RUNNER" "$PROVIDER_KEY" | head -1 | json_get items.0.netCents)
+SETTLE_AMOUNT=$(api GET "/provider/settlements?from=$TODAY&to=$TODAY&runnerId=$READY_RUNNER" "$PROVIDER_KEY" | head -1 | json_get items.0.amountCents)
+[ "$(( ${SETTLE_FEE:-0} + ${SETTLE_NET:-0} ))" = "${SETTLE_AMOUNT:-0}" ] && ok "结算抽成正确：费用 $SETTLE_FEE + 净额 $SETTLE_NET = 流水 $SETTLE_AMOUNT" || fail "结算抽成不一致"
+
+# ---------- 9. 关租约后拒绝新建沙箱 ----------
 info "9. 关闭租约，验证授权回收"
 api POST "/market/leases/$LEASE_ID/close" "$ADMIN_KEY" >/dev/null
 REGIONS_AFTER=$(api GET /regions "$ADMIN_KEY")
@@ -172,9 +233,11 @@ for _ in $(seq 1 20); do
   sleep 2
 done
 psql_db "UPDATE sandbox SET state='destroyed', \"desiredState\"='destroyed' WHERE id='$SANDBOX_ID'" >/dev/null || true
-SNAP_ID=$(psql_db "SELECT id FROM snapshot WHERE name='$SNAPSHOT_NAME' AND \"organizationId\"='$CONSUMER_ORG' LIMIT 1")
-[ -n "$SNAP_ID" ] && curl -s -X DELETE "$API/snapshots/$SNAP_ID" -H "Authorization: Bearer $ADMIN_KEY" >/dev/null || true
+delete_snapshot_and_wait
 curl -s -X DELETE "$API/provider/market/listings/$LISTING_ID" -H "Authorization: Bearer $PROVIDER_KEY" >/dev/null || true
+psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG' AND \"referenceId\" IN (SELECT id::text FROM market_usage_charges WHERE \"listingId\"='$LISTING_ID')" >/dev/null || true
+psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG' AND \"description\"='E2E topup'" >/dev/null || true
+psql_db "DELETE FROM market_usage_charges WHERE \"listingId\"='$LISTING_ID'" >/dev/null || true
 psql_db "DELETE FROM market_leases WHERE \"listingId\"='$LISTING_ID'" >/dev/null || true
 psql_db "DELETE FROM market_listings WHERE id='$LISTING_ID'" >/dev/null || true
 psql_db "DELETE FROM api_key WHERE name='$PROVIDER_KEY_NAME'" >/dev/null || true

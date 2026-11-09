@@ -3,7 +3,14 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
-import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import {
+  BadRequestException,
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
 import { In, Repository } from 'typeorm'
 import { TypedConfigService } from '../../config/typed-config.service'
@@ -11,6 +18,7 @@ import { OrganizationService } from '../../organization/services/organization.se
 import { Region } from '../../region/entities/region.entity'
 import { RegionService } from '../../region/services/region.service'
 import { MarketLease } from '../entities/market-lease.entity'
+import { MarketCreditService } from './market-credit.service'
 import { MarketListing } from '../entities/market-listing.entity'
 import { MarketLeaseStatus } from '../enums/market-lease-status.enum'
 import { MarketListingStatus } from '../enums/market-listing-status.enum'
@@ -30,6 +38,7 @@ export class MarketLeasesService {
     private readonly organizationService: OrganizationService,
     private readonly regionService: RegionService,
     private readonly configService: TypedConfigService,
+    private readonly creditService: MarketCreditService,
   ) {}
 
   async listForConsumer(consumerOrganizationId: string): Promise<MarketLeaseDto[]> {
@@ -38,6 +47,33 @@ export class MarketLeasesService {
       order: { createdAt: 'DESC' },
     })
     return this.toDtos(leases)
+  }
+
+  /**
+   * Returns the active lease (and its listing) the organization holds on a region, if any.
+   * Used to enforce market balance before creating sandboxes on someone else's region.
+   */
+  async findActiveLeaseForRegion(
+    consumerOrganizationId: string,
+    regionId: string,
+  ): Promise<{ lease: MarketLease; listing: MarketListing } | null> {
+    const leases = await this.leaseRepository.find({
+      where: { consumerOrganizationId, status: MarketLeaseStatus.ACTIVE },
+    })
+    if (leases.length === 0) {
+      return null
+    }
+    const listings = await this.listingRepository.find({
+      where: { id: In([...new Set(leases.map((lease) => lease.listingId))]) },
+    })
+    const listingMap = new Map(listings.map((listing) => [listing.id, listing]))
+    for (const lease of leases) {
+      const listing = listingMap.get(lease.listingId)
+      if (listing && listing.regionId === regionId) {
+        return { lease, listing }
+      }
+    }
+    return null
   }
 
   async listForProvider(providerOrganizationId: string): Promise<MarketLeaseDto[]> {
@@ -75,6 +111,21 @@ export class MarketLeasesService {
       requested.totalDiskGiB > listing.totalDiskGiB
     ) {
       throw new BadRequestException('Requested capacity is outside the listing capacity')
+    }
+
+    // M2: require enough balance for at least one hour of the requested capacity.
+    const hourlyCents = Math.ceil(
+      requested.totalCpu * listing.cpuHourCents +
+        requested.totalMemoryGiB * listing.memoryGiBHourCents +
+        requested.totalDiskGiB * listing.diskGiBHourCents,
+    )
+    if (hourlyCents > 0) {
+      const balance = await this.creditService.getBalance(consumerOrganizationId)
+      if (balance.balanceCents < hourlyCents) {
+        throw new ForbiddenException(
+          `Insufficient market balance: need at least ${hourlyCents} cents for one hour, current balance is ${balance.balanceCents} cents`,
+        )
+      }
     }
 
     let lease = await this.leaseRepository.findOne({

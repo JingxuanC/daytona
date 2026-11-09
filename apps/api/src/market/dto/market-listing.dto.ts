@@ -4,7 +4,7 @@
  */
 
 import { ApiProperty, ApiPropertyOptional, ApiSchema } from '@nestjs/swagger'
-import { IsEnum, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator'
+import { IsEnum, IsIn, IsInt, IsOptional, IsString, MaxLength, Min } from 'class-validator'
 import { MarketListingStatus, MarketListingVisibility } from '../enums/market-listing-status.enum'
 import { MarketListing } from '../entities/market-listing.entity'
 
@@ -186,6 +186,21 @@ export class UpdateMarketListingDto {
   @IsOptional()
   @IsEnum(MarketListingStatus)
   status?: MarketListingStatus
+}
+
+export const MARKET_LISTING_SORTS = ['newest', 'price_asc', 'price_desc', 'capacity_desc'] as const
+export type MarketListingSort = (typeof MARKET_LISTING_SORTS)[number]
+
+@ApiSchema({ name: 'MarketListingsQuery' })
+export class MarketListingsQueryDto {
+  @ApiPropertyOptional({
+    description: 'Ordering of the public listings',
+    enum: MARKET_LISTING_SORTS,
+    default: 'newest',
+  })
+  @IsOptional()
+  @IsIn(MARKET_LISTING_SORTS)
+  sort?: MarketListingSort
 }
 
 @ApiSchema({ name: 'MarketListing' })
