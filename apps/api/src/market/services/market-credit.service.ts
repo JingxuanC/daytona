@@ -120,6 +120,25 @@ export class MarketCreditService {
     return this.append(manager, params)
   }
 
+  /**
+   * Organizations whose latest balance is below `thresholdCents` (risk control).
+   * Returns a bounded page of organizations.
+   */
+  async getBalancesBelow(
+    thresholdCents: number,
+    limit = 200,
+  ): Promise<Array<{ organizationId: string; balanceCents: number }>> {
+    const rows: Array<{ organizationId: string; balanceAfterCents: number | string }> = await this.dataSource.query(
+      `SELECT DISTINCT ON ("organizationId") "organizationId", "balanceAfterCents"
+       FROM "market_credit_entries"
+       ORDER BY "organizationId", "createdAt" DESC`,
+    )
+    return rows
+      .map((row) => ({ organizationId: row.organizationId, balanceCents: Number(row.balanceAfterCents) }))
+      .filter((row) => row.balanceCents < thresholdCents)
+      .slice(0, limit)
+  }
+
   /** Organizations with a negative market balance (operations view). */
   async getNegativeBalances(limit = 20): Promise<Array<{ organizationId: string; balanceCents: number }>> {
     const rows: Array<{ organizationId: string; balanceAfterCents: number | string }> = await this.dataSource.query(
@@ -131,6 +150,36 @@ export class MarketCreditService {
       .map((row) => ({ organizationId: row.organizationId, balanceCents: Number(row.balanceAfterCents) }))
       .filter((row) => row.balanceCents < 0)
       .slice(0, limit)
+  }
+
+  /** Credits a consumer for an SLA breach (platform-funded in M4). */
+  async compensate(
+    organizationId: string,
+    amountCents: number,
+    referenceId: string,
+    description?: string,
+  ): Promise<MarketCreditEntry | null> {
+    if (amountCents <= 0) {
+      return null
+    }
+    return this.withOrgLock(organizationId, () =>
+      this.dataSource.transaction(async (manager) => {
+        const existing = await manager.getRepository(MarketCreditEntry).findOne({
+          where: { organizationId, referenceType: 'sla_compensation', referenceId },
+        })
+        if (existing) {
+          return null
+        }
+        return this.append(manager, {
+          organizationId,
+          type: MarketCreditEntryType.REFUND,
+          signedAmountCents: amountCents,
+          description: description ?? 'SLA compensation',
+          referenceType: 'sla_compensation',
+          referenceId,
+        })
+      }),
+    )
   }
 
   async hasUsageCharge(organizationId: string, referenceId: string): Promise<boolean> {

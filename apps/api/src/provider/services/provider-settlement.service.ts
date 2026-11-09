@@ -26,7 +26,7 @@ import { SettlementSandboxLine } from '../entities/settlement-sandbox-line.entit
 import { SettlementPeriod, SettlementStatus } from '../entities/settlement-period.entity'
 import { DAY_MS, formatUtcDay, resolveDateRange, round } from '../utils/date-range.util'
 import { computeAmountCents } from '../utils/pricing.util'
-import { platformFeeBpsFromEnv } from '../../common/utils/platform-fee'
+import { MarketSettingsService } from '../../market/services/market-settings.service'
 import { ProviderPricingService } from './provider-pricing.service'
 import { ProviderUsageService } from './provider-usage.service'
 
@@ -61,6 +61,7 @@ export class ProviderSettlementService implements TrackableJobExecutions, OnAppl
     private readonly redisLockProvider: RedisLockProvider,
     private readonly providerUsageService: ProviderUsageService,
     private readonly providerPricingService: ProviderPricingService,
+    private readonly marketSettingsService: MarketSettingsService,
   ) {}
 
   async onApplicationShutdown() {
@@ -98,6 +99,7 @@ export class ProviderSettlementService implements TrackableJobExecutions, OnAppl
    */
   async settleDay(dayLabel: string, organizationId?: string): Promise<number> {
     const targets = await this.resolveTargets(organizationId)
+    const feeBps = await this.marketSettingsService.getPlatformFeeBps()
     const pricingByOrganization = new Map<string, Map<string, RunnerPricing>>()
     let settled = 0
 
@@ -164,7 +166,6 @@ export class ProviderSettlementService implements TrackableJobExecutions, OnAppl
           periodEnd: dayLabel,
         })
 
-      const feeBps = platformFeeBpsFromEnv()
       const platformFeeCents = Math.round((totals.amountCents * feeBps) / 10_000)
 
       period.status = SettlementStatus.PENDING

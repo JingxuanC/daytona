@@ -5,6 +5,10 @@
 
 import axios, { type AxiosInstance } from 'axios'
 import type {
+  CreateMarketBidPayload,
+  MarketAlertsResponse,
+  MarketBid,
+  MarketBidsResponse,
   MarketChargesQuery,
   MarketChargesResponse,
   MarketCreditResponse,
@@ -13,6 +17,9 @@ import type {
   MarketListingsResponse,
   MarketListingSort,
   MarketUsageQuery,
+  MarketOverview,
+  MarketSettings,
+  MarketSlaEventsResponse,
   MarketUsageResponse,
   OpenMarketLeasePayload,
   PublishMarketListingPayload,
@@ -128,6 +135,77 @@ export class MarketApiClient {
 
   async retireListing(listingId: string): Promise<unknown> {
     const { data } = await this.http.delete(`/provider/market/listings/${encodeURIComponent(listingId)}`)
+    return data
+  }
+
+  async getSettings(): Promise<MarketSettings> {
+    const { data } = await this.http.get<MarketSettings>('/admin/market/settings')
+    return data
+  }
+
+  async updateSettings(platformFeeBps: number): Promise<MarketSettings> {
+    const { data } = await this.http.put<MarketSettings>('/admin/market/settings', { platformFeeBps })
+    return data
+  }
+
+  async getOverview(): Promise<MarketOverview> {
+    const { data } = await this.http.get<MarketOverview>('/admin/market/overview')
+    return data
+  }
+
+  async topUp(organizationId: string, amountCents: number, description?: string): Promise<MarketCreditResponse> {
+    const { data } = await this.http.post<MarketCreditResponse>('/admin/market/credits/topup', {
+      organizationId,
+      amountCents,
+      description,
+    })
+    return data
+  }
+
+  async runRiskControl(): Promise<{ ok: boolean }> {
+    const { data } = await this.http.post<{ ok: boolean }>('/admin/market/risk/run')
+    return data
+  }
+
+  async listAlerts(state: 'open' | 'all' = 'open'): Promise<MarketAlertsResponse> {
+    const { data } = await this.http.get<MarketAlertsResponse>('/market/alerts', { params: { state } })
+    return data
+  }
+
+  async listSlaEvents(query: { from?: string; to?: string }): Promise<MarketSlaEventsResponse> {
+    const { data } = await this.http.get<MarketSlaEventsResponse>('/market/sla-events', {
+      params: { from: query.from, to: query.to },
+    })
+    return data
+  }
+
+  async listBids(): Promise<MarketBidsResponse> {
+    const { data } = await this.http.get<MarketBidsResponse>('/market/bids')
+    return data
+  }
+
+  async createBid(payload: CreateMarketBidPayload): Promise<MarketBid> {
+    const { data } = await this.http.post<MarketBid>('/market/bids', payload)
+    return data
+  }
+
+  async withdrawBid(bidId: string): Promise<MarketBid> {
+    const { data } = await this.http.post<MarketBid>(`/market/bids/${encodeURIComponent(bidId)}/withdraw`)
+    return data
+  }
+
+  async listProviderBids(): Promise<MarketBidsResponse> {
+    const { data } = await this.http.get<MarketBidsResponse>('/provider/market/bids')
+    return data
+  }
+
+  async acceptBid(bidId: string): Promise<MarketLease> {
+    const { data } = await this.http.post<MarketLease>(`/provider/market/bids/${encodeURIComponent(bidId)}/accept`)
+    return data
+  }
+
+  async rejectBid(bidId: string): Promise<MarketBid> {
+    const { data } = await this.http.post<MarketBid>(`/provider/market/bids/${encodeURIComponent(bidId)}/reject`)
     return data
   }
 

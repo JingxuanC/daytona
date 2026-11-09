@@ -76,6 +76,64 @@ export class MarketLeasesService {
     return null
   }
 
+  /** All active leases of an organization together with their listing (risk control). */
+  async listActiveForConsumer(
+    consumerOrganizationId: string,
+  ): Promise<Array<{ lease: MarketLease; listing: MarketListing }>> {
+    const leases = await this.leaseRepository.find({
+      where: { consumerOrganizationId, status: MarketLeaseStatus.ACTIVE },
+    })
+    if (leases.length === 0) {
+      return []
+    }
+    const listings = await this.listingRepository.find({
+      where: { id: In([...new Set(leases.map((lease) => lease.listingId))]) },
+    })
+    const listingMap = new Map(listings.map((listing) => [listing.id, listing]))
+    return leases
+      .map((lease) => ({ lease, listing: listingMap.get(lease.listingId) }))
+      .filter((item): item is { lease: MarketLease; listing: MarketListing } => Boolean(item.listing))
+  }
+
+  /**
+   * Risk-control close: closes the lease and revokes the consumer region quota.
+   * Unlike `close` it does not require the caller's organization and is idempotent.
+   */
+  async closeForRisk(leaseId: string, reason = 'Closed by market risk control'): Promise<boolean> {
+    const lease = await this.leaseRepository.findOne({ where: { id: leaseId } })
+    if (!lease || lease.status !== MarketLeaseStatus.ACTIVE) {
+      return false
+    }
+    lease.status = MarketLeaseStatus.CLOSED
+    lease.closedAt = new Date()
+    await this.leaseRepository.save(lease)
+    const listing = await this.listingRepository.findOne({ where: { id: lease.listingId } })
+    if (listing) {
+      await this.revokeRegionQuotaIfIdle(lease.consumerOrganizationId, listing.regionId)
+    }
+    this.logger.warn(`Market lease ${leaseId} closed (${reason})`)
+    return true
+  }
+
+  private async revokeRegionQuotaIfIdle(consumerOrganizationId: string, regionId: string): Promise<void> {
+    const remaining = await this.leaseRepository
+      .createQueryBuilder('lease')
+      .innerJoin(MarketListing, 'listing', 'listing.id = lease."listingId"')
+      .where('lease."consumerOrganizationId" = :consumerOrganizationId', { consumerOrganizationId })
+      .andWhere('lease."status" = :status', { status: MarketLeaseStatus.ACTIVE })
+      .andWhere('listing."regionId" = :regionId', { regionId })
+      .getCount()
+    if (remaining > 0) {
+      return
+    }
+    try {
+      const sandboxClass = this.configService.getOrThrow('defaultSandboxClass')
+      await this.organizationService.deleteRegionQuota(consumerOrganizationId, regionId, sandboxClass)
+    } catch (error) {
+      this.logger.warn(`Failed to revoke region quota on market lease close: ${(error as Error).message}`)
+    }
+  }
+
   async listForProvider(providerOrganizationId: string): Promise<MarketLeaseDto[]> {
     const listings = await this.listingRepository.find({ where: { providerOrganizationId } })
     if (listings.length === 0) {
@@ -114,20 +172,57 @@ export class MarketLeasesService {
     }
 
     // M2: require enough balance for at least one hour of the requested capacity.
-    const hourlyCents = Math.ceil(
-      requested.totalCpu * listing.cpuHourCents +
-        requested.totalMemoryGiB * listing.memoryGiBHourCents +
-        requested.totalDiskGiB * listing.diskGiBHourCents,
-    )
-    if (hourlyCents > 0) {
-      const balance = await this.creditService.getBalance(consumerOrganizationId)
-      if (balance.balanceCents < hourlyCents) {
-        throw new ForbiddenException(
-          `Insufficient market balance: need at least ${hourlyCents} cents for one hour, current balance is ${balance.balanceCents} cents`,
-        )
-      }
-    }
+    await this.assertSufficientBalance(consumerOrganizationId, requested, listing)
 
+    const lease = await this.applyLease(consumerOrganizationId, listing, requested, {
+      currency: listing.currency,
+      cpuHourCents: listing.cpuHourCents,
+      memoryGiBHourCents: listing.memoryGiBHourCents,
+      diskGiBHourCents: listing.diskGiBHourCents,
+      gpuHourCents: listing.gpuHourCents,
+    })
+
+    return this.toDto(lease, listing)
+  }
+
+  /** Requires enough balance for at least one hour of the requested capacity. */
+  async assertSufficientBalance(
+    consumerOrganizationId: string,
+    requested: { totalCpu: number; totalMemoryGiB: number; totalDiskGiB: number },
+    prices: { cpuHourCents: number; memoryGiBHourCents: number; diskGiBHourCents: number },
+  ): Promise<void> {
+    const hourlyCents = Math.ceil(
+      requested.totalCpu * prices.cpuHourCents +
+        requested.totalMemoryGiB * prices.memoryGiBHourCents +
+        requested.totalDiskGiB * prices.diskGiBHourCents,
+    )
+    if (hourlyCents <= 0) {
+      return
+    }
+    const balance = await this.creditService.getBalance(consumerOrganizationId)
+    if (balance.balanceCents < hourlyCents) {
+      throw new ForbiddenException(
+        `Insufficient market balance: need at least ${hourlyCents} cents for one hour, current balance is ${balance.balanceCents} cents`,
+      )
+    }
+  }
+
+  /**
+   * Opens or resizes the consumer's active lease on a listing with the given price snapshot
+   * (listing price for normal leases, bid price for accepted bids) and grants the region quota.
+   */
+  async applyLease(
+    consumerOrganizationId: string,
+    listing: MarketListing,
+    requested: { totalCpu: number; totalMemoryGiB: number; totalDiskGiB: number },
+    prices: {
+      currency: string
+      cpuHourCents: number
+      memoryGiBHourCents: number
+      diskGiBHourCents: number
+      gpuHourCents: number
+    },
+  ): Promise<MarketLease> {
     let lease = await this.leaseRepository.findOne({
       where: { consumerOrganizationId, listingId: listing.id, status: MarketLeaseStatus.ACTIVE },
     })
@@ -136,17 +231,22 @@ export class MarketLeasesService {
       lease.totalCpu = requested.totalCpu
       lease.totalMemoryGiB = requested.totalMemoryGiB
       lease.totalDiskGiB = requested.totalDiskGiB
+      lease.currency = prices.currency
+      lease.cpuHourCents = prices.cpuHourCents
+      lease.memoryGiBHourCents = prices.memoryGiBHourCents
+      lease.diskGiBHourCents = prices.diskGiBHourCents
+      lease.gpuHourCents = prices.gpuHourCents
       lease = await this.leaseRepository.save(lease)
     } else {
       lease = new MarketLease({
         listingId: listing.id,
         consumerOrganizationId,
         status: MarketLeaseStatus.ACTIVE,
-        currency: listing.currency,
-        cpuHourCents: listing.cpuHourCents,
-        memoryGiBHourCents: listing.memoryGiBHourCents,
-        diskGiBHourCents: listing.diskGiBHourCents,
-        gpuHourCents: listing.gpuHourCents,
+        currency: prices.currency,
+        cpuHourCents: prices.cpuHourCents,
+        memoryGiBHourCents: prices.memoryGiBHourCents,
+        diskGiBHourCents: prices.diskGiBHourCents,
+        gpuHourCents: prices.gpuHourCents,
         totalCpu: requested.totalCpu,
         totalMemoryGiB: requested.totalMemoryGiB,
         totalDiskGiB: requested.totalDiskGiB,
@@ -158,8 +258,7 @@ export class MarketLeasesService {
     }
 
     await this.grantRegionQuota(consumerOrganizationId, listing, requested)
-
-    return this.toDto(lease, listing)
+    return lease
   }
 
   async close(consumerOrganizationId: string, leaseId: string): Promise<MarketLeaseDto> {

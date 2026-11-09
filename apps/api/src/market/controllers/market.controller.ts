@@ -16,6 +16,9 @@ import { OrganizationResourcePermission } from '../../organization/enums/organiz
 import { OrganizationAuthContextGuard } from '../../organization/guards/organization-auth-context.guard'
 import { MarketLeaseDto, MarketLeasesResponseDto, CreateMarketLeaseDto } from '../dto/market-lease.dto'
 import { MarketListingsQueryDto, MarketListingsResponseDto } from '../dto/market-listing.dto'
+import { MarketAlertDto, MarketAlertsQueryDto, MarketAlertsResponseDto } from '../dto/market-alert.dto'
+import { CreateMarketBidDto, MarketBidDto, MarketBidsResponseDto } from '../dto/market-bid.dto'
+import { MarketSlaEventDto, MarketSlaEventsQueryDto, MarketSlaEventsResponseDto } from '../dto/market-sla.dto'
 import {
   MarketChargesQueryDto,
   MarketChargesResponseDto,
@@ -26,6 +29,8 @@ import {
 import { MarketUsageQueryDto, MarketUsageResponseDto } from '../dto/market-usage.dto'
 import { MarketLeasesService } from '../services/market-leases.service'
 import { MarketListingsService } from '../services/market-listings.service'
+import { MarketAlertsService } from '../services/market-alerts.service'
+import { MarketBidsService } from '../services/market-bids.service'
 import { MarketChargingService } from '../services/market-charging.service'
 import { MarketCreditService } from '../services/market-credit.service'
 import { MarketUsageService } from '../services/market-usage.service'
@@ -45,6 +50,8 @@ export class MarketController {
     private readonly usageService: MarketUsageService,
     private readonly creditService: MarketCreditService,
     private readonly chargingService: MarketChargingService,
+    private readonly alertsService: MarketAlertsService,
+    private readonly bidsService: MarketBidsService,
   ) {}
 
   @Get('listings')
@@ -140,6 +147,75 @@ export class MarketController {
       currency: balance.currency,
       entries: entries.map(MarketCreditEntryDto.fromEntity),
     }
+  }
+
+  @Get('alerts')
+  @ApiOperation({
+    summary: 'List market risk alerts of the organization',
+    operationId: 'listMarketAlerts',
+    description: 'Low / negative balance alerts raised by market risk control.',
+  })
+  @ApiResponse({ status: 200, type: MarketAlertsResponseDto })
+  async listAlerts(
+    @IsOrganizationAuthContext() authContext: OrganizationAuthContext,
+    @Query() query: MarketAlertsQueryDto,
+  ): Promise<MarketAlertsResponseDto> {
+    const alerts = await this.alertsService.list(authContext.organizationId, query.state ?? 'open')
+    return { items: alerts.map(MarketAlertDto.fromEntity) }
+  }
+
+  @Get('bids')
+  @ApiOperation({
+    summary: 'List price bids submitted by the organization',
+    operationId: 'listMarketBids',
+  })
+  @ApiResponse({ status: 200, type: MarketBidsResponseDto })
+  async listBids(@IsOrganizationAuthContext() authContext: OrganizationAuthContext): Promise<MarketBidsResponseDto> {
+    const items = await this.bidsService.listForConsumer(authContext.organizationId)
+    return { items }
+  }
+
+  @Post('bids')
+  @HttpCode(201)
+  @ApiOperation({
+    summary: 'Submit a price bid for a market listing',
+    operationId: 'createMarketBid',
+    description: 'The provider can accept the bid to turn it into a lease priced with the bid snapshot.',
+  })
+  @ApiResponse({ status: 201, type: MarketBidDto })
+  @RequiredOrganizationResourcePermissions([OrganizationResourcePermission.WRITE_SANDBOXES])
+  async createBid(
+    @IsOrganizationAuthContext() authContext: OrganizationAuthContext,
+    @Body() dto: CreateMarketBidDto,
+  ): Promise<MarketBidDto> {
+    return this.bidsService.create(authContext.organizationId, dto)
+  }
+
+  @Post('bids/:id/withdraw')
+  @HttpCode(200)
+  @ApiOperation({ summary: 'Withdraw a pending price bid', operationId: 'withdrawMarketBid' })
+  @ApiParam({ name: 'id', description: 'Bid ID', type: 'string' })
+  @ApiResponse({ status: 200, type: MarketBidDto })
+  @RequiredOrganizationResourcePermissions([OrganizationResourcePermission.WRITE_SANDBOXES])
+  async withdrawBid(
+    @IsOrganizationAuthContext() authContext: OrganizationAuthContext,
+    @Param('id') id: string,
+  ): Promise<MarketBidDto> {
+    return this.bidsService.withdraw(authContext.organizationId, id)
+  }
+
+  @Get('sla-events')
+  @ApiOperation({
+    summary: 'List SLA breach compensations of the organization',
+    operationId: 'listMarketSlaEvents',
+  })
+  @ApiResponse({ status: 200, type: MarketSlaEventsResponseDto })
+  async listSlaEvents(
+    @IsOrganizationAuthContext() authContext: OrganizationAuthContext,
+    @Query() query: MarketSlaEventsQueryDto,
+  ): Promise<MarketSlaEventsResponseDto> {
+    const events = await this.chargingService.listSlaEvents(authContext.organizationId, query)
+    return { items: events.map(MarketSlaEventDto.fromEntity) }
   }
 
   @Get('charges')

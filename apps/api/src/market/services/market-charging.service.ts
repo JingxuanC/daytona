@@ -9,13 +9,18 @@ import { InjectRepository } from '@nestjs/typeorm'
 import { Between, DataSource, In, IsNull, LessThan, MoreThan, Repository } from 'typeorm'
 import { MarketCreditEntryType } from '../enums/market-credit-entry-type.enum'
 import { MarketCreditService } from './market-credit.service'
+import { MarketAlertsService } from './market-alerts.service'
+import { MarketSettingsService } from './market-settings.service'
 import { MarketLease } from '../entities/market-lease.entity'
 import { MarketListing } from '../entities/market-listing.entity'
 import { MarketUsageCharge } from '../entities/market-usage-charge.entity'
+import { MarketSlaEvent } from '../entities/market-sla-event.entity'
+import { MarketAlertSeverity, MarketAlertType } from '../enums/market-alert-type.enum'
+import { Runner } from '../../sandbox/entities/runner.entity'
+import { RunnerDailyMetric } from '../../provider/entities/runner-daily-metric.entity'
 import { SandboxUsagePeriod } from '../../usage/entities/sandbox-usage-period.entity'
 import { SandboxUsagePeriodArchive } from '../../usage/entities/sandbox-usage-period-archive.entity'
 import { DAY_MS, formatUtcDay, HOUR_MS, resolveDateRange, round } from '../../provider/utils/date-range.util'
-import { platformFeeBpsFromEnv } from '../../common/utils/platform-fee'
 
 interface LeaseDayUsage {
   cpuHours: number
@@ -42,11 +47,19 @@ export class MarketChargingService {
     private readonly listingRepository: Repository<MarketListing>,
     @InjectRepository(MarketUsageCharge)
     private readonly chargeRepository: Repository<MarketUsageCharge>,
+    @InjectRepository(MarketSlaEvent)
+    private readonly slaEventRepository: Repository<MarketSlaEvent>,
+    @InjectRepository(Runner)
+    private readonly runnerRepository: Repository<Runner>,
+    @InjectRepository(RunnerDailyMetric)
+    private readonly dailyMetricRepository: Repository<RunnerDailyMetric>,
     @InjectRepository(SandboxUsagePeriod)
     private readonly usagePeriodRepository: Repository<SandboxUsagePeriod>,
     @InjectRepository(SandboxUsagePeriodArchive)
     private readonly usagePeriodArchiveRepository: Repository<SandboxUsagePeriodArchive>,
     private readonly creditService: MarketCreditService,
+    private readonly settingsService: MarketSettingsService,
+    private readonly alertsService: MarketAlertsService,
     private readonly dataSource: DataSource,
   ) {}
 
@@ -66,7 +79,7 @@ export class MarketChargingService {
   async recomputeDay(day?: string): Promise<number> {
     const dayLabel = day?.slice(0, 10) ?? this.previousDayLabel()
     const range = resolveDateRange(dayLabel, dayLabel, 1)
-    const feeBps = platformFeeBpsFromEnv()
+    const feeBps = await this.settingsService.getPlatformFeeBps()
 
     const leases = await this.leaseRepository.find({
       where: [{ status: 'active' as MarketLease['status'] }, { closedAt: MoreThan(range.from) }],
@@ -107,6 +120,7 @@ export class MarketChargingService {
       const platformFeeCents = Math.round((amountCents * feeBps) / 10_000)
       const providerNetCents = amountCents - platformFeeCents
 
+      let savedCharge: MarketUsageCharge | null = null
       await this.dataSource.transaction(async (manager) => {
         const chargeRepository = manager.getRepository(MarketUsageCharge)
         const charge = chargeRepository.create({
@@ -125,6 +139,7 @@ export class MarketChargingService {
           currency: lease.currency,
         })
         const saved = await chargeRepository.save(charge)
+        savedCharge = saved
 
         await this.creditService.appendWithinManager(manager, {
           organizationId: lease.consumerOrganizationId,
@@ -135,10 +150,93 @@ export class MarketChargingService {
           referenceId: saved.id,
         })
       })
+
+      if (savedCharge) {
+        await this.evaluateSla(savedCharge, lease, listing)
+      }
       charged++
     }
 
     return charged
+  }
+
+  /**
+   * SLA evaluation for one charged day: when the listing region runners' sandbox start success
+   * rate (from runner_daily_metrics) drops below the listing SLA target, the consumer receives a
+   * platform-funded compensation credit proportional to that day's charge.
+   */
+  private async evaluateSla(charge: MarketUsageCharge, lease: MarketLease, listing: MarketListing): Promise<void> {
+    if (listing.slaCompensationBps <= 0 || listing.slaAvailabilityPct <= 0) {
+      return
+    }
+
+    const runners = await this.runnerRepository.find({ where: { region: listing.regionId } })
+    if (runners.length === 0) {
+      return
+    }
+    const metrics = await this.dailyMetricRepository.find({
+      where: { date: charge.periodStart, runnerId: In(runners.map((runner) => runner.id)) },
+    })
+    const starts = metrics.reduce((acc, metric) => acc + metric.sandboxStarts, 0)
+    if (starts <= 0) {
+      return
+    }
+    const failures = metrics.reduce((acc, metric) => acc + metric.sandboxStartFailures, 0)
+    const availabilityPct = ((starts - failures) / starts) * 100
+    if (availabilityPct >= listing.slaAvailabilityPct) {
+      return
+    }
+
+    const compensationCents = Math.round((charge.amountCents * listing.slaCompensationBps) / 10_000)
+    if (compensationCents <= 0) {
+      return
+    }
+
+    try {
+      const event = this.slaEventRepository.create({
+        chargeId: charge.id,
+        leaseId: lease.id,
+        consumerOrganizationId: charge.consumerOrganizationId,
+        providerOrganizationId: charge.providerOrganizationId,
+        periodStart: charge.periodStart,
+        availabilityPct: round(availabilityPct, 2),
+        requiredAvailabilityPct: listing.slaAvailabilityPct,
+        compensationCents,
+        currency: charge.currency,
+        reason: `Sandbox start success ${round(availabilityPct, 2)}% below SLA ${listing.slaAvailabilityPct}%`,
+      })
+      const saved = await this.slaEventRepository.save(event)
+      await this.creditService.compensate(
+        charge.consumerOrganizationId,
+        compensationCents,
+        saved.id,
+        `SLA compensation ${charge.periodStart}`,
+      )
+      await this.alertsService.raise(
+        charge.consumerOrganizationId,
+        MarketAlertType.SLA_BREACH,
+        MarketAlertSeverity.WARNING,
+        `SLA 未达标（${round(availabilityPct, 2)}% < ${listing.slaAvailabilityPct}%），已补偿 ${compensationCents} 分`,
+        { chargeId: charge.id, availabilityPct: round(availabilityPct, 2), compensationCents },
+      )
+    } catch (error) {
+      // Unique index on chargeId makes re-runs idempotent.
+      this.logger.debug(`SLA evaluation skipped: ${(error as Error).message}`)
+    }
+  }
+
+  async listSlaEvents(
+    consumerOrganizationId: string,
+    options: { from?: string; to?: string } = {},
+  ): Promise<MarketSlaEvent[]> {
+    const range = resolveDateRange(options.from, options.to)
+    return this.slaEventRepository.find({
+      where: {
+        consumerOrganizationId,
+        periodStart: Between(range.fromLabel, range.toLabel),
+      },
+      order: { periodStart: 'DESC' },
+    })
   }
 
   async listCharges(

@@ -22,6 +22,7 @@ import { RoutePath } from '@/enums/RoutePath'
 import { useCommandPaletteAnalytics } from '@/hooks/useCommandPaletteAnalytics'
 import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
 import { cn, getMetaKey } from '@/lib/utils'
+import { useMarketSettingsQuery } from '@/market-api/queries'
 import { lazyRoutes } from '@/routes'
 import { usePylonCommands } from '@/vendor/pylon'
 import { OrganizationRolePermissionsEnum, OrganizationUserRoleEnum } from '@daytona/api-client'
@@ -42,6 +43,7 @@ import {
   PackageOpen,
   SearchIcon,
   Server,
+  Shield,
   Store,
   Settings,
   TextSearch,
@@ -267,6 +269,8 @@ export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarPro
     ]
   }, [])
 
+  const { data: marketSettings } = useMarketSettingsQuery()
+
   const sidebarGroups: { label: string; items: SidebarItem[] }[] = useMemo(() => {
     return [
       { label: 'Sandboxes', items: sidebarItems },
@@ -277,8 +281,23 @@ export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarPro
       { label: 'Settings', items: settingsItems },
       { label: 'Billing', items: billingItems },
       { label: 'Infrastructure', items: infrastructureItems },
+      ...(marketSettings
+        ? [
+            {
+              label: 'Platform',
+              items: [
+                {
+                  icon: <Shield size={16} strokeWidth={1.5} />,
+                  label: '算力市场运营',
+                  path: RoutePath.ADMIN_MARKET,
+                  preload: lazyRoutes.AdminMarket,
+                },
+              ],
+            },
+          ]
+        : []),
     ].filter((group) => group.items.length > 0)
-  }, [sidebarItems, settingsItems, billingItems, infrastructureItems, miscItems])
+  }, [sidebarItems, settingsItems, billingItems, infrastructureItems, miscItems, marketSettings])
 
   const commandItems = useMemo(() => {
     return sidebarGroups

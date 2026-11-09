@@ -5,6 +5,7 @@
 
 import { PageContent, PageHeader, PageIntro, PageLayout } from '@/components/PageLayout'
 import { MarketAccountTab } from '@/components/market/MarketAccountTab'
+import { BidsTab } from '@/components/market/BidsTab'
 import { MarketBrowseTab } from '@/components/market/MarketBrowseTab'
 import { MarketUsageTab } from '@/components/market/MarketUsageTab'
 import { MyLeasesTab } from '@/components/market/MyLeasesTab'
@@ -13,7 +14,7 @@ import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
 import { OrganizationRolePermissionsEnum } from '@daytona/api-client'
 import React, { useMemo, useState } from 'react'
 
-type ComputeMarketTab = 'browse' | 'leases' | 'usage' | 'account'
+type ComputeMarketTab = 'browse' | 'bids' | 'leases' | 'usage' | 'account'
 
 const ComputeMarket: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ComputeMarketTab>('browse')
@@ -34,6 +35,7 @@ const ComputeMarket: React.FC = () => {
         <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as ComputeMarketTab)} className="flex-1">
           <TabsList variant="underline">
             <TabsTrigger value="browse">浏览算力</TabsTrigger>
+            <TabsTrigger value="bids">竞价</TabsTrigger>
             <TabsTrigger value="leases">我的租用</TabsTrigger>
             <TabsTrigger value="usage">我的用量</TabsTrigger>
             <TabsTrigger value="account">账户</TabsTrigger>
@@ -41,6 +43,9 @@ const ComputeMarket: React.FC = () => {
 
           <TabsContent value="browse" className="flex flex-col gap-3 pt-3">
             <MarketBrowseTab writePermitted={writePermitted} />
+          </TabsContent>
+          <TabsContent value="bids" className="flex flex-col gap-3 pt-3">
+            <BidsTab writePermitted={writePermitted} />
           </TabsContent>
           <TabsContent value="leases" className="flex flex-col gap-3 pt-3">
             <MyLeasesTab writePermitted={writePermitted} />

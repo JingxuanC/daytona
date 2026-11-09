@@ -30,6 +30,9 @@ export interface MarketListing {
   status: MarketListingStatus
   platformFeeBps: number
   activeLeaseCount?: number
+  reputation?: MarketReputation | null
+  slaAvailabilityPct: number
+  slaCompensationBps: number
   createdAt: string
   updatedAt: string
 }
@@ -185,4 +188,96 @@ export interface MarketChargesResponse {
 export interface MarketChargesQuery {
   from?: string
   to?: string
+}
+
+export interface MarketSettings {
+  platformFeeBps: number
+}
+
+export interface MarketOverview {
+  listings: Record<string, number>
+  activeLeases: number
+  charges: { count: number; amountCents: number; platformFeeCents: number }
+  negativeBalanceOrganizations: Array<{ organizationId: string; balanceCents: number }>
+  platformFeeBps: number
+}
+
+export type MarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn'
+
+export interface MarketBid {
+  id: string
+  listingId: string
+  listingName: string | null
+  regionId: string | null
+  providerOrganizationId: string | null
+  consumerOrganizationId: string
+  status: MarketBidStatus
+  currency: string
+  cpuHourCents: number
+  memoryGiBHourCents: number
+  diskGiBHourCents: number
+  gpuHourCents: number
+  totalCpu: number
+  totalMemoryGiB: number
+  totalDiskGiB: number
+  message: string | null
+  leaseId: string | null
+  createdAt: string
+  resolvedAt: string | null
+}
+
+export interface MarketBidsResponse {
+  items: MarketBid[]
+}
+
+export interface CreateMarketBidPayload {
+  listingId: string
+  cpuHourCents: number
+  memoryGiBHourCents: number
+  diskGiBHourCents: number
+  gpuHourCents?: number
+  totalCpu: number
+  totalMemoryGiB: number
+  totalDiskGiB: number
+  message?: string
+}
+
+export interface MarketSlaEvent {
+  id: string
+  leaseId: string
+  periodStart: string
+  availabilityPct: number
+  requiredAvailabilityPct: number
+  compensationCents: number
+  currency: string
+  reason: string
+  createdAt: string
+}
+
+export interface MarketSlaEventsResponse {
+  items: MarketSlaEvent[]
+}
+
+export type MarketAlertType = 'low_balance' | 'negative_balance' | 'sla_breach'
+
+export interface MarketAlert {
+  id: string
+  type: MarketAlertType
+  severity: 'warning' | 'critical'
+  message: string
+  createdAt: string
+  resolvedAt: string | null
+}
+
+export interface MarketAlertsResponse {
+  items: MarketAlert[]
+}
+
+export interface MarketReputation {
+  availabilityScore: number
+  startupSuccessRatePct: number | null
+  avgStartupSeconds: number | null
+  sandboxStarts7d: number
+  sandboxStartFailures7d: number
+  openAlertCount: number
 }

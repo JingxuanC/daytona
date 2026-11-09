@@ -20,7 +20,9 @@ import {
   MarketListingsResponseDto,
   UpdateMarketListingDto,
 } from '../dto/market-listing.dto'
-import { MarketLeasesResponseDto } from '../dto/market-lease.dto'
+import { MarketLeaseDto, MarketLeasesResponseDto } from '../dto/market-lease.dto'
+import { MarketBidDto, MarketBidsResponseDto } from '../dto/market-bid.dto'
+import { MarketBidsService } from '../services/market-bids.service'
 import { MarketLeasesService } from '../services/market-leases.service'
 import { MarketListingsService } from '../services/market-listings.service'
 
@@ -36,6 +38,7 @@ export class ProviderMarketController {
   constructor(
     private readonly listingsService: MarketListingsService,
     private readonly leasesService: MarketLeasesService,
+    private readonly bidsService: MarketBidsService,
   ) {}
 
   @Get('listings')
@@ -99,6 +102,50 @@ export class ProviderMarketController {
     @Param('id') id: string,
   ): Promise<MarketListingDto> {
     return this.listingsService.retire(authContext.organizationId, id)
+  }
+
+  @Get('bids')
+  @ApiOperation({
+    summary: 'List price bids received on the organization market listings',
+    operationId: 'listProviderMarketBids',
+  })
+  @ApiResponse({ status: 200, type: MarketBidsResponseDto })
+  @RequiredOrganizationResourcePermissions([OrganizationResourcePermission.READ_RUNNERS])
+  async listBids(@IsOrganizationAuthContext() authContext: OrganizationAuthContext): Promise<MarketBidsResponseDto> {
+    const items = await this.bidsService.listForProvider(authContext.organizationId)
+    return { items }
+  }
+
+  @Post('bids/:id/accept')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Accept a consumer price bid (creates a lease at the bid price)',
+    operationId: 'acceptProviderMarketBid',
+  })
+  @ApiParam({ name: 'id', description: 'Bid ID', type: 'string' })
+  @ApiResponse({ status: 200, type: MarketLeaseDto })
+  @RequiredOrganizationResourcePermissions([OrganizationResourcePermission.WRITE_RUNNERS])
+  async acceptBid(
+    @IsOrganizationAuthContext() authContext: OrganizationAuthContext,
+    @Param('id') id: string,
+  ): Promise<MarketLeaseDto> {
+    return this.bidsService.accept(authContext.organizationId, id)
+  }
+
+  @Post('bids/:id/reject')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Reject a consumer price bid',
+    operationId: 'rejectProviderMarketBid',
+  })
+  @ApiParam({ name: 'id', description: 'Bid ID', type: 'string' })
+  @ApiResponse({ status: 200, type: MarketBidDto })
+  @RequiredOrganizationResourcePermissions([OrganizationResourcePermission.WRITE_RUNNERS])
+  async rejectBid(
+    @IsOrganizationAuthContext() authContext: OrganizationAuthContext,
+    @Param('id') id: string,
+  ): Promise<MarketBidDto> {
+    return this.bidsService.reject(authContext.organizationId, id)
   }
 
   @Get('leases')

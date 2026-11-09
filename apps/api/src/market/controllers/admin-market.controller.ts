@@ -3,17 +3,22 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
-import { Body, Controller, Get, HttpCode, Param, Post, UseGuards } from '@nestjs/common'
+import { Body, Controller, Get, HttpCode, Param, Post, Put, UseGuards } from '@nestjs/common'
 import { ApiBearerAuth, ApiOAuth2, ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger'
 import { AuthStrategy } from '../../auth/decorators/auth-strategy.decorator'
 import { AuthStrategyType } from '../../auth/enums/auth-strategy-type.enum'
 import { AuthenticatedRateLimitGuard } from '../../common/guards/authenticated-rate-limit.guard'
 import { RequiredSystemRole } from '../../user/decorators/required-system-role.decorator'
 import { SystemRole } from '../../user/enums/system-role.enum'
-import { AdminRecomputeMarketChargesDto, AdminMarketTopupDto } from '../dto/admin-market.dto'
+import {
+  AdminMarketTopupDto,
+  AdminRecomputeMarketChargesDto,
+  AdminUpdateMarketSettingsDto,
+} from '../dto/admin-market.dto'
 import { MarketCreditEntryDto, MarketCreditResponseDto } from '../dto/market-credit.dto'
 import { MarketChargingService } from '../services/market-charging.service'
 import { MarketCreditService } from '../services/market-credit.service'
+import { MarketSettingsService } from '../services/market-settings.service'
 
 @Controller('admin/market')
 @ApiTags('admin')
@@ -26,6 +31,7 @@ export class AdminMarketController {
   constructor(
     private readonly creditService: MarketCreditService,
     private readonly chargingService: MarketChargingService,
+    private readonly settingsService: MarketSettingsService,
   ) {}
 
   @Post('credits/topup')
@@ -62,11 +68,38 @@ export class AdminMarketController {
   @ApiOperation({
     summary: 'Market operations overview',
     operationId: 'adminGetMarketOverview',
-    description: 'Platform only: listing/lease/charge totals and organizations with a negative market balance.',
+    description: 'Platform only: listing/lease/charge totals, platform fee and organizations with a negative balance.',
   })
   @ApiResponse({ status: 200 })
-  async overview(): Promise<Awaited<ReturnType<MarketChargingService['getOverview']>>> {
-    return this.chargingService.getOverview()
+  async overview(): Promise<Awaited<ReturnType<MarketChargingService['getOverview']>> & { platformFeeBps: number }> {
+    const [overview, platformFeeBps] = await Promise.all([
+      this.chargingService.getOverview(),
+      this.settingsService.getPlatformFeeBps(),
+    ])
+    return { ...overview, platformFeeBps }
+  }
+
+  @Get('settings')
+  @ApiOperation({
+    summary: 'Read runtime market settings',
+    operationId: 'adminGetMarketSettings',
+    description: 'Platform only: currently returns the platform commission in basis points.',
+  })
+  @ApiResponse({ status: 200 })
+  async getSettings(): Promise<{ platformFeeBps: number }> {
+    return { platformFeeBps: await this.settingsService.getPlatformFeeBps() }
+  }
+
+  @Put('settings')
+  @ApiOperation({
+    summary: 'Update runtime market settings',
+    operationId: 'adminUpdateMarketSettings',
+    description: 'Platform only: persists the platform commission so it applies without a restart.',
+  })
+  @ApiResponse({ status: 200 })
+  async updateSettings(@Body() dto: AdminUpdateMarketSettingsDto): Promise<{ platformFeeBps: number }> {
+    const platformFeeBps = await this.settingsService.setPlatformFeeBps(dto.platformFeeBps)
+    return { platformFeeBps }
   }
 
   @Post('charges/recompute')
