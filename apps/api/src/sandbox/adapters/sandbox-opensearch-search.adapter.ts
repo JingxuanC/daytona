@@ -198,6 +198,11 @@ export class SandboxOpenSearchSearchAdapter implements SandboxSearchAdapter, OnM
       must.push({ terms: { region: filters.regionIds } })
     }
 
+    // Runner filter
+    if (filters.runnerId) {
+      must.push({ term: { runnerId: filters.runnerId } })
+    }
+
     // Sandbox class filter
     if (filters.sandboxClasses?.length) {
       must.push({ terms: { sandboxClass: filters.sandboxClasses } })

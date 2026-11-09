@@ -1647,6 +1647,7 @@ export class SandboxService {
         states: query.states,
         snapshots: query.snapshots,
         regionIds: query.regionIds,
+        runnerId: query.runnerId,
         sandboxClasses: query.sandboxClasses,
         minCpu: query.minCpu,
         maxCpu: query.maxCpu,

@@ -21,6 +21,7 @@ import { setTimeout as sleep } from 'timers/promises'
 import { LogExecution } from '../../common/decorators/log-execution.decorator'
 import { WithInstrumentation } from '../../common/decorators/otel.decorator'
 import { SandboxRepository } from '../../sandbox/repositories/sandbox.repository'
+import { Sandbox } from '../../sandbox/entities/sandbox.entity'
 import { SandboxDesiredStateUpdatedEvent } from '../../sandbox/events/sandbox-desired-state-updated.event'
 import { SandboxDesiredState } from '../../sandbox/enums/sandbox-desired-state.enum'
 import { Region } from '../../region/entities/region.entity'
@@ -135,6 +136,7 @@ export class UsageService implements TrackableJobExecutions, OnApplicationShutdo
     usagePeriod.disk = event.sandbox.disk
     usagePeriod.organizationId = event.sandbox.organizationId
     usagePeriod.region = event.sandbox.region
+    usagePeriod.runnerId = event.sandbox.runnerId ?? null
     usagePeriod.sandboxClass = event.sandbox.sandboxClass
     usagePeriod.regionType = await this.getRegionType(event.sandbox.region)
 
@@ -208,6 +210,9 @@ export class UsageService implements TrackableJobExecutions, OnApplicationShutdo
             const newUsagePeriod = SandboxUsagePeriod.fromUsagePeriod(usagePeriod)
             newUsagePeriod.startAt = closeTime
             newUsagePeriod.endAt = null
+            // The sandbox may have been rescheduled to a different runner while the
+            // previous period was open, keep the attribution accurate.
+            newUsagePeriod.runnerId = sandbox.runnerId ?? usagePeriod.runnerId
             if (sandbox.state === SandboxState.STOPPED || sandbox.state === SandboxState.PAUSED) {
               newUsagePeriod.cpu = 0
               newUsagePeriod.gpu = 0
@@ -225,6 +230,77 @@ export class UsageService implements TrackableJobExecutions, OnApplicationShutdo
     }
 
     await this.redisLockProvider.unlock('close-and-reopen-usage-periods')
+  }
+
+  /**
+   * A sandbox can be rescheduled to another runner while its usage period is still open
+   * (for example when a node is drained). Split the open period at the moment the runner
+   * changes so usage is attributed to the node that actually served it.
+   */
+  @Cron(CronExpression.EVERY_MINUTE, { name: 'split-usage-periods-on-runner-change' })
+  @TrackJobExecution()
+  @LogExecution('split-usage-periods-on-runner-change')
+  @WithInstrumentation()
+  async splitUsagePeriodsOnRunnerChange() {
+    const lockKey = 'split-usage-periods-on-runner-change'
+    if (!(await this.redisLockProvider.lock(lockKey, 60))) {
+      return
+    }
+
+    try {
+      const mismatchedPeriods = await this.sandboxUsagePeriodRepository
+        .createQueryBuilder('period')
+        .innerJoin(Sandbox, 'sandbox', 'sandbox.id = period.sandboxId')
+        .where('period.endAt IS NULL')
+        .andWhere('period.organizationId <> :warmPoolOrganization', {
+          warmPoolOrganization: SANDBOX_WARM_POOL_UNASSIGNED_ORGANIZATION,
+        })
+        .andWhere('sandbox.runnerId IS DISTINCT FROM period.runnerId')
+        .orderBy('period.startAt', 'ASC')
+        .take(200)
+        .getMany()
+
+      if (mismatchedPeriods.length === 0) {
+        return
+      }
+
+      const splitAt = new Date()
+
+      for (const usagePeriod of mismatchedPeriods) {
+        if (!(await this.aquireLock(usagePeriod.sandboxId))) {
+          continue
+        }
+
+        try {
+          const sandbox = await this.sandboxRepository.findOne({
+            where: {
+              id: usagePeriod.sandboxId,
+            },
+          })
+
+          if (!sandbox) {
+            continue
+          }
+
+          await this.sandboxUsagePeriodRepository.manager.transaction(async (transactionalEntityManager) => {
+            usagePeriod.endAt = splitAt
+            await transactionalEntityManager.save(usagePeriod)
+
+            const newUsagePeriod = SandboxUsagePeriod.fromUsagePeriod(usagePeriod)
+            newUsagePeriod.startAt = splitAt
+            newUsagePeriod.endAt = null
+            newUsagePeriod.runnerId = sandbox.runnerId ?? null
+            await transactionalEntityManager.save(newUsagePeriod)
+          })
+        } catch (error) {
+          this.logger.error(`Error splitting usage period for sandbox ${usagePeriod.sandboxId}`, error)
+        } finally {
+          await this.releaseLock(usagePeriod.sandboxId)
+        }
+      }
+    } finally {
+      await this.redisLockProvider.unlock(lockKey)
+    }
   }
 
   @Cron(CronExpression.EVERY_5_SECONDS, { name: 'archive-usage-periods' })

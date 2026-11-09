@@ -393,6 +393,21 @@ const router = createBrowserRouter([
             element: <RunnersAccessOutlet />,
             children: [{ index: true, lazy: lazyRoutes.Runners }],
           },
+          {
+            path: getRouteSubPath(RoutePath.PROVIDER),
+            element: <RequiredFeatureFlagOutlet flagKey={FeatureFlags.ORGANIZATION_INFRASTRUCTURE} />,
+            children: [
+              {
+                element: (
+                  <RequiredPermissionsOrganizationOutlet
+                    pageTitle="算力控制台"
+                    requiredPermissions={[OrganizationRolePermissionsEnum.READ_RUNNERS]}
+                  />
+                ),
+                children: [{ index: true, lazy: lazyRoutes.ProviderConsole }],
+              },
+            ],
+          },
           { path: getRouteSubPath(RoutePath.ACCOUNT_SETTINGS), lazy: lazyRoutes.AccountSettings },
           { path: getRouteSubPath(RoutePath.USER_INVITATIONS), lazy: lazyRoutes.UserOrganizationInvitations },
           { path: getRouteSubPath(RoutePath.ONBOARDING), lazy: lazyRoutes.Onboarding },

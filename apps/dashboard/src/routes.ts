@@ -41,6 +41,7 @@ export const lazyRoutes = {
   OrganizationMembers: createRouteLazy(() => import('@/pages/OrganizationMembers')),
   OrganizationSettings: createRouteLazy(() => import('@/pages/OrganizationSettings')),
   Playground: createRouteLazy(() => import('@/pages/Playground')),
+  ProviderConsole: createRouteLazy(() => import('@/pages/ProviderConsole')),
   Regions: createRouteLazy(() => import('@/pages/Regions')),
   Registries: createRouteLazy(() => import('@/pages/Registries')),
   Runners: createRouteLazy(() => import('@/pages/Runners')),

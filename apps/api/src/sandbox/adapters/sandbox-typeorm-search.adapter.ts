@@ -55,6 +55,9 @@ export class SandboxTypeormSearchAdapter implements SandboxSearchAdapter {
     if (filters.regionIds?.length) {
       qb.andWhere('sandbox.region IN (:...regionIds)', { regionIds: filters.regionIds })
     }
+    if (filters.runnerId) {
+      qb.andWhere('sandbox.runnerId = :runnerId', { runnerId: filters.runnerId })
+    }
     if (filters.sandboxClasses?.length) {
       qb.andWhere('sandbox.sandboxClass IN (:...sandboxClasses)', { sandboxClasses: filters.sandboxClasses })
     }
