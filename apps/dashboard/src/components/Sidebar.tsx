@@ -30,6 +30,7 @@ import {
   Box,
   ChartColumn,
   Container,
+  Cpu,
   CreditCard,
   HardDrive,
   Joystick,
@@ -236,6 +237,12 @@ export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarPro
         label: 'Runners',
         path: RoutePath.RUNNERS,
         preload: lazyRoutes.Runners,
+      })
+      arr.push({
+        icon: <Cpu size={16} strokeWidth={1.5} />,
+        label: '算力控制台',
+        path: RoutePath.PROVIDER,
+        preload: lazyRoutes.ProviderConsole,
       })
     }
 
