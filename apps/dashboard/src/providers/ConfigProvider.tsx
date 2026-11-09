@@ -31,7 +31,10 @@ export function ConfigProvider(props: Props) {
   })
 
   const oidcConfig: AuthProviderProps = useMemo(() => {
-    const isLocalhost = window.location.hostname === 'localhost'
+    // 自托管常见入口是 127.0.0.1 / ::1；只把字面量 localhost 当作本地会让登录态
+    // 落到 InMemoryWebStorage，任何整页跳转/刷新都会丢登录态（被踢回 Dex 登录页）。
+    const localHostnames = new Set(['localhost', '127.0.0.1', '::1', '[::1]'])
+    const isLocalhost = localHostnames.has(window.location.hostname)
     const stateStore = isLocalhost ? window.sessionStorage : new InMemoryWebStorage()
 
     return {
