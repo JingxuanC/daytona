@@ -42,6 +42,7 @@ import {
   PackageOpen,
   SearchIcon,
   Server,
+  Store,
   Settings,
   TextSearch,
   Users,
@@ -256,6 +257,12 @@ export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarPro
         label: 'Playground',
         path: RoutePath.PLAYGROUND,
         preload: lazyRoutes.Playground,
+      },
+      {
+        icon: <Store size={16} strokeWidth={1.5} />,
+        label: '算力市场',
+        path: RoutePath.MARKET,
+        preload: lazyRoutes.ComputeMarket,
       },
     ]
   }, [])

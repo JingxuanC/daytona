@@ -32,6 +32,7 @@ export enum RoutePath {
   REGIONS = '/dashboard/regions',
   RUNNERS = '/dashboard/runners',
   PROVIDER = '/dashboard/provider',
+  MARKET = '/dashboard/market',
   PLAYGROUND = '/dashboard/playground',
 
   // User routes

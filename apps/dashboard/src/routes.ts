@@ -35,6 +35,7 @@ export const lazyRoutes = {
   AccountSettings: createRouteLazy(() => import('@/pages/AccountSettings')),
   AuditLogs: createRouteLazy(() => import('@/pages/AuditLogs')),
   EmailVerify: createRouteLazy(() => import('@/pages/EmailVerify')),
+  ComputeMarket: createRouteLazy(() => import('@/pages/ComputeMarket')),
   Keys: createRouteLazy(() => import('@/pages/Keys')),
   Limits: createRouteLazy(() => import('@/pages/Limits')),
   Onboarding: createRouteLazy(() => import('@/pages/Onboarding')),
