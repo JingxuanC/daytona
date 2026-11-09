@@ -29,6 +29,12 @@ const OFFLINE_THRESHOLD_MS = 60 * 1000
 const HIGH_LATENCY_THRESHOLD_MS = 1000
 const RESOURCE_PRESSURE_THRESHOLD_PCT = 95
 const HEALTH_FAILURE_THRESHOLD = 3
+/**
+ * 新建节点在拿到第一次心跳前处于 INITIALIZING。宽限期内不报警（避免启动噪音），
+ * 超过宽限期仍未上线则按 OFFLINE 处理。默认 5 分钟，可用
+ * PROVIDER_NODE_INITIALIZING_GRACE_SECONDS 覆盖（验收时调小）。
+ */
+const DEFAULT_INITIALIZING_GRACE_MS = 5 * 60 * 1000
 /** Only starts of sandboxes created within this window are used as startup duration samples. */
 const FRESH_START_WINDOW_MS = 30 * 60 * 1000
 const METRICS_WINDOW_DAYS = 7
@@ -36,6 +42,13 @@ const METRICS_WINDOW_DAYS = 7
 interface ProviderRunner {
   organizationId: string
   runner: Runner
+}
+
+function initializingGraceMs(): number {
+  const raw = process.env.PROVIDER_NODE_INITIALIZING_GRACE_SECONDS
+  if (raw === undefined || raw.trim() === '') return DEFAULT_INITIALIZING_GRACE_MS
+  const seconds = Number(raw)
+  return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : DEFAULT_INITIALIZING_GRACE_MS
 }
 
 interface DailyMetricRow {
@@ -155,10 +168,17 @@ export class ProviderMetricsService {
       const providerRunners = await this.getProviderRunners()
       const now = Date.now()
 
+      const graceMs = initializingGraceMs()
+
       for (const { organizationId, runner } of providerRunners) {
-        // A node that is still bootstrapping has no heartbeat history yet.
+        // 刚创建、还在启动的节点给一段宽限期；超过宽限期仍是 INITIALIZING 说明
+        // 节点从未上线，必须按 OFFLINE 报警，否则“永远连不上”的节点完全不可见。
         if (runner.state === RunnerState.INITIALIZING) {
-          continue
+          const createdAtMs = runner.createdAt ? runner.createdAt.getTime() : null
+          const ageMs = createdAtMs === null ? Number.POSITIVE_INFINITY : now - createdAtMs
+          if (ageMs < graceMs) {
+            continue
+          }
         }
 
         const lastCheckedMs = runner.lastChecked ? runner.lastChecked.getTime() : null
