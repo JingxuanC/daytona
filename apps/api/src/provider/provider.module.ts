@@ -5,6 +5,7 @@
 
 import { Module } from '@nestjs/common'
 import { TypeOrmModule } from '@nestjs/typeorm'
+import { OrganizationModule } from '../organization/organization.module'
 import { RegionModule } from '../region/region.module'
 import { Runner } from '../sandbox/entities/runner.entity'
 import { SandboxModule } from '../sandbox/sandbox.module'
@@ -27,6 +28,7 @@ import { ProviderUsageService } from './services/provider-usage.service'
 
 @Module({
   imports: [
+    OrganizationModule,
     SandboxModule,
     RegionModule,
     TypeOrmModule.forFeature([
