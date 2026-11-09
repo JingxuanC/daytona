@@ -31,8 +31,11 @@ import { useAvailableRegionsQuery } from '@/hooks/queries/useRegionsQuery'
 import { useSelectedOrganization } from '@/hooks/useSelectedOrganization'
 import { getMarketApiErrorMessage } from '@/market-api/client'
 import {
+  useAcceptMarketBidMutation,
+  useProviderMarketBidsQuery,
   useProviderMarketListingsQuery,
   usePublishMarketListingMutation,
+  useRejectMarketBidMutation,
   useRetireMarketListingMutation,
   useUpdateMarketListingMutation,
 } from '@/market-api/queries'
@@ -91,6 +94,9 @@ export function MarketPublishTab({ writePermitted }: { writePermitted: boolean }
   const publish = usePublishMarketListingMutation()
   const update = useUpdateMarketListingMutation()
   const retire = useRetireMarketListingMutation()
+  const bidsQuery = useProviderMarketBidsQuery()
+  const acceptBid = useAcceptMarketBidMutation()
+  const rejectBid = useRejectMarketBidMutation()
 
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<MarketListing | null>(null)
@@ -269,6 +275,87 @@ export function MarketPublishTab({ writePermitted }: { writePermitted: boolean }
           </TableBody>
         </Table>
       </TableContainer>
+
+      <div className="flex flex-col gap-2">
+        <h3 className="text-sm font-medium">收到的出价</h3>
+        <TableContainer>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>算力</TableHead>
+                <TableHead>出价</TableHead>
+                <TableHead>容量</TableHead>
+                <TableHead>状态</TableHead>
+                <TableHead className="text-right">操作</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {bidsQuery.data?.items.length ? (
+                bidsQuery.data.items.map((bid) => (
+                  <TableRow key={bid.id}>
+                    <TableCell className="text-sm">{bid.listingName ?? bid.listingId.slice(0, 8)}</TableCell>
+                    <TableCell className="text-sm">
+                      {formatPrice(bid.cpuHourCents, bid.currency)} ·{' '}
+                      {formatPrice(bid.memoryGiBHourCents, bid.currency)}
+                    </TableCell>
+                    <TableCell className="text-sm">
+                      {bid.totalCpu} vCPU · {bid.totalMemoryGiB} GiB
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={bid.status === 'accepted' ? 'success' : 'outline'}>
+                        {bid.status === 'pending'
+                          ? '待处理'
+                          : bid.status === 'accepted'
+                            ? '已接受'
+                            : bid.status === 'rejected'
+                              ? '已拒绝'
+                              : '已撤回'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {bid.status === 'pending' ? (
+                        <div className="flex justify-end gap-2">
+                          <Button
+                            size="sm"
+                            disabled={!writePermitted || acceptBid.isPending}
+                            onClick={async () => {
+                              try {
+                                await acceptBid.mutateAsync(bid.id)
+                                toast.success('已接受出价，租约按出价价格创建')
+                              } catch (error) {
+                                toast.error(getMarketApiErrorMessage(error))
+                              }
+                            }}
+                          >
+                            接受
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={!writePermitted || rejectBid.isPending}
+                            onClick={async () => {
+                              try {
+                                await rejectBid.mutateAsync(bid.id)
+                                toast.success('已拒绝出价')
+                              } catch (error) {
+                                toast.error(getMarketApiErrorMessage(error))
+                              }
+                            }}
+                          >
+                            拒绝
+                          </Button>
+                        </div>
+                      ) : null}
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableEmptyState colSpan={5} message="还没有收到出价" />
+              )}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </div>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl">

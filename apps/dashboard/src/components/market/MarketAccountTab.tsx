@@ -20,7 +20,12 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { getMarketApiErrorMessage } from '@/market-api/client'
-import { useMarketChargesQuery, useMarketCreditQuery } from '@/market-api/queries'
+import {
+  useMarketAlertsQuery,
+  useMarketChargesQuery,
+  useMarketCreditQuery,
+  useMarketSlaEventsQuery,
+} from '@/market-api/queries'
 import { useState } from 'react'
 
 const ENTRY_COLUMNS = 4
@@ -42,6 +47,8 @@ export function MarketAccountTab() {
   const creditQuery = useMarketCreditQuery()
   const [range, setRange] = useState(defaultRange)
   const chargesQuery = useMarketChargesQuery(range)
+  const alertsQuery = useMarketAlertsQuery()
+  const slaQuery = useMarketSlaEventsQuery(range)
 
   const credit = creditQuery.data
   const balance = credit?.balanceCents ?? 0
@@ -209,6 +216,76 @@ export function MarketAccountTab() {
                   ))
                 ) : (
                   <TableEmptyState colSpan={CHARGE_COLUMNS} message="暂无扣费记录" />
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </div>
+      </div>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-medium">风控告警</h3>
+          <TableContainer>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>时间</TableHead>
+                  <TableHead>类型</TableHead>
+                  <TableHead>说明</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {alertsQuery.data?.items.length ? (
+                  alertsQuery.data.items.map((alert) => (
+                    <TableRow key={alert.id}>
+                      <TableCell className="text-sm">{new Date(alert.createdAt).toLocaleString()}</TableCell>
+                      <TableCell>
+                        <Badge variant={alert.severity === 'critical' ? 'destructive' : 'outline'}>
+                          {alert.type === 'low_balance'
+                            ? '余额偏低'
+                            : alert.type === 'negative_balance'
+                              ? '余额为负'
+                              : 'SLA 未达标'}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-sm">{alert.message}</TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableEmptyState colSpan={3} message="没有未处理的告警" />
+                )}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </div>
+
+        <div className="flex flex-col gap-2">
+          <h3 className="text-sm font-medium">SLA 补偿</h3>
+          <TableContainer>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>日期</TableHead>
+                  <TableHead>可用性</TableHead>
+                  <TableHead className="text-right">补偿</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {slaQuery.data?.items.length ? (
+                  slaQuery.data.items.map((event) => (
+                    <TableRow key={event.id}>
+                      <TableCell className="text-sm">{event.periodStart}</TableCell>
+                      <TableCell className="text-sm">
+                        {event.availabilityPct}% / SLA {event.requiredAvailabilityPct}%
+                      </TableCell>
+                      <TableCell className="text-right text-sm tabular-nums">
+                        {formatAmount(event.compensationCents)}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableEmptyState colSpan={3} message="没有 SLA 补偿记录" />
                 )}
               </TableBody>
             </Table>

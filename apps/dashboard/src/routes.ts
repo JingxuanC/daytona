@@ -33,6 +33,7 @@ function createRouteLazy<TComponent extends ComponentType<any>>(
 
 export const lazyRoutes = {
   AccountSettings: createRouteLazy(() => import('@/pages/AccountSettings')),
+  AdminMarket: createRouteLazy(() => import('@/pages/AdminMarket')),
   AuditLogs: createRouteLazy(() => import('@/pages/AuditLogs')),
   EmailVerify: createRouteLazy(() => import('@/pages/EmailVerify')),
   ComputeMarket: createRouteLazy(() => import('@/pages/ComputeMarket')),

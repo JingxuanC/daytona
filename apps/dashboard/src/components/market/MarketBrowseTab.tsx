@@ -27,13 +27,13 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { getMarketApiErrorMessage } from '@/market-api/client'
-import { useMarketListingsQuery, useOpenMarketLeaseMutation } from '@/market-api/queries'
+import { useCreateMarketBidMutation, useMarketListingsQuery, useOpenMarketLeaseMutation } from '@/market-api/queries'
 import type { MarketListing, MarketListingSort } from '@/market-api/types'
 import { RefreshCw } from 'lucide-react'
 import { useState } from 'react'
 import { toast } from 'sonner'
 
-const COLUMNS = 7
+const COLUMNS = 9
 
 function formatPrice(centsPerHour: number, currency: string): string {
   const symbol = currency === 'CNY' ? '¥' : ''
@@ -44,7 +44,12 @@ export function MarketBrowseTab({ writePermitted }: { writePermitted: boolean })
   const [sort, setSort] = useState<MarketListingSort>('newest')
   const { data, isLoading, error, refetch, isFetching } = useMarketListingsQuery(sort)
   const openLease = useOpenMarketLeaseMutation()
+  const createBid = useCreateMarketBidMutation()
   const [selected, setSelected] = useState<MarketListing | null>(null)
+  const [bidTarget, setBidTarget] = useState<MarketListing | null>(null)
+  const [bidCpu, setBidCpu] = useState('')
+  const [bidMemory, setBidMemory] = useState('')
+  const [bidCpuPrice, setBidCpuPrice] = useState('80')
   const [cpu, setCpu] = useState('')
   const [memory, setMemory] = useState('')
   const [disk, setDisk] = useState('')
@@ -86,6 +91,8 @@ export function MarketBrowseTab({ writePermitted }: { writePermitted: boolean })
               <SelectItem value="price_asc">价格从低到高</SelectItem>
               <SelectItem value="price_desc">价格从高到低</SelectItem>
               <SelectItem value="capacity_desc">容量优先</SelectItem>
+              <SelectItem value="reputation_desc">信誉优先</SelectItem>
+              <SelectItem value="success_rate_desc">启动成功率优先</SelectItem>
             </SelectContent>
           </Select>
           <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isFetching}>
@@ -111,6 +118,8 @@ export function MarketBrowseTab({ writePermitted }: { writePermitted: boolean })
               <TableHead>内存</TableHead>
               <TableHead>磁盘</TableHead>
               <TableHead>租约</TableHead>
+              <TableHead>评分</TableHead>
+              <TableHead>成功率</TableHead>
               <TableHead className="text-right">操作</TableHead>
             </TableRow>
           </TableHeader>
@@ -139,14 +148,37 @@ export function MarketBrowseTab({ writePermitted }: { writePermitted: boolean })
                   <TableCell className="text-sm">{listing.totalMemoryGiB} GiB</TableCell>
                   <TableCell className="text-sm">{listing.totalDiskGiB} GiB</TableCell>
                   <TableCell className="text-sm">{listing.activeLeaseCount ?? 0}</TableCell>
+                  <TableCell className="text-sm">
+                    {listing.reputation ? `${listing.reputation.availabilityScore.toFixed(1)}` : '—'}
+                  </TableCell>
+                  <TableCell className="text-sm">
+                    {listing.reputation?.startupSuccessRatePct != null
+                      ? `${listing.reputation.startupSuccessRatePct.toFixed(1)}%`
+                      : '—'}
+                  </TableCell>
                   <TableCell className="text-right">
-                    <Button
-                      size="sm"
-                      disabled={!writePermitted || openLease.isPending}
-                      onClick={() => setSelected(listing)}
-                    >
-                      租用
-                    </Button>
+                    <div className="flex justify-end gap-2">
+                      <Button
+                        size="sm"
+                        disabled={!writePermitted || openLease.isPending}
+                        onClick={() => setSelected(listing)}
+                      >
+                        租用
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={!writePermitted || createBid.isPending}
+                        onClick={() => {
+                          setBidTarget(listing)
+                          setBidCpu('')
+                          setBidMemory('')
+                          setBidCpuPrice('80')
+                        }}
+                      >
+                        出价
+                      </Button>
+                    </div>
                   </TableCell>
                 </TableRow>
               ))
@@ -210,6 +242,85 @@ export function MarketBrowseTab({ writePermitted }: { writePermitted: boolean })
             </Button>
             <Button onClick={handleLease} disabled={openLease.isPending}>
               {openLease.isPending ? <Spinner /> : '确认租用'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(bidTarget)} onOpenChange={(open) => !open && setBidTarget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>提交出价</DialogTitle>
+            <DialogDescription>
+              为 {bidTarget?.name ?? ''} 出价，提供方接受后按出价生成租约（价格以出价快照为准）。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="grid gap-1">
+                <Label htmlFor="bid-cpu-price">vCPU 出价（分/小时）</Label>
+                <Input
+                  id="bid-cpu-price"
+                  type="number"
+                  min={0}
+                  value={bidCpuPrice}
+                  onChange={(event) => setBidCpuPrice(event.target.value)}
+                />
+              </div>
+              <div className="grid gap-1">
+                <Label htmlFor="bid-cpu">vCPU 数量</Label>
+                <Input
+                  id="bid-cpu"
+                  type="number"
+                  min={1}
+                  max={bidTarget?.totalCpu}
+                  value={bidCpu}
+                  placeholder={String(bidTarget?.totalCpu ?? '')}
+                  onChange={(event) => setBidCpu(event.target.value)}
+                />
+              </div>
+            </div>
+            <div className="grid gap-1">
+              <Label htmlFor="bid-memory">内存 GiB</Label>
+              <Input
+                id="bid-memory"
+                type="number"
+                min={1}
+                max={bidTarget?.totalMemoryGiB}
+                value={bidMemory}
+                placeholder={String(bidTarget?.totalMemoryGiB ?? '')}
+                onChange={(event) => setBidMemory(event.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBidTarget(null)}>
+              取消
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!bidTarget) {
+                  return
+                }
+                try {
+                  await createBid.mutateAsync({
+                    listingId: bidTarget.id,
+                    cpuHourCents: Number(bidCpuPrice) || 0,
+                    memoryGiBHourCents: Math.max(1, Math.round((Number(bidCpuPrice) || 0) / 10)),
+                    diskGiBHourCents: 1,
+                    totalCpu: Number(bidCpu) || bidTarget.totalCpu,
+                    totalMemoryGiB: Number(bidMemory) || bidTarget.totalMemoryGiB,
+                    totalDiskGiB: bidTarget.totalDiskGiB,
+                  })
+                  toast.success('出价已提交，等待提供方处理')
+                  setBidTarget(null)
+                } catch (error) {
+                  toast.error(getMarketApiErrorMessage(error))
+                }
+              }}
+              disabled={createBid.isPending}
+            >
+              {createBid.isPending ? <Spinner /> : '提交出价'}
             </Button>
           </DialogFooter>
         </DialogContent>

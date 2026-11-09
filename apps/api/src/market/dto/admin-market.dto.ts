@@ -23,6 +23,19 @@ export class AdminMarketTopupDto {
   description?: string
 }
 
+@ApiSchema({ name: 'AdminUpdateMarketSettings' })
+export class AdminUpdateMarketSettingsDto {
+  @ApiProperty({
+    description: 'Platform commission in basis points (0-10000)',
+    example: 1000,
+    minimum: 0,
+    maximum: 10000,
+  })
+  @IsInt()
+  @Min(0)
+  platformFeeBps: number
+}
+
 @ApiSchema({ name: 'AdminRecomputeMarketCharges' })
 export class AdminRecomputeMarketChargesDto {
   @ApiPropertyOptional({

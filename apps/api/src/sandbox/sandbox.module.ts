@@ -6,6 +6,8 @@
 import { Module } from '@nestjs/common'
 import { DataSource } from 'typeorm'
 import { SandboxController } from './controllers/sandbox.controller'
+import { AdminMarketRiskController } from './controllers/admin-market-risk.controller'
+import { MarketRiskService } from './services/market-risk.service'
 import { SandboxService } from './services/sandbox.service'
 import { TypeOrmModule } from '@nestjs/typeorm'
 import { Sandbox } from './entities/sandbox.entity'
@@ -95,6 +97,7 @@ import { SandboxSearchAdapterProvider } from './providers/sandbox-search.provide
     }),
   ],
   controllers: [
+    AdminMarketRiskController,
     SandboxController,
     RunnerController,
     ToolboxController,
@@ -104,6 +107,7 @@ import { SandboxSearchAdapterProvider } from './providers/sandbox-search.provide
     JobController,
   ],
   providers: [
+    MarketRiskService,
     SandboxService,
     SandboxManager,
     BackupManager,

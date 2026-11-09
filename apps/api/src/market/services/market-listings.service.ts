@@ -5,7 +5,7 @@
 
 import { BadRequestException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
+import { In, Repository } from 'typeorm'
 import { TypedConfigService } from '../../config/typed-config.service'
 import { OrganizationService } from '../../organization/services/organization.service'
 import { Region } from '../../region/entities/region.entity'
@@ -13,6 +13,9 @@ import { RegionService } from '../../region/services/region.service'
 import { RunnerState } from '../../sandbox/enums/runner-state.enum'
 import { Runner } from '../../sandbox/entities/runner.entity'
 import { RunnerPricing } from '../../provider/entities/runner-pricing.entity'
+import { RunnerAlert } from '../../provider/entities/runner-alert.entity'
+import { RunnerDailyMetric } from '../../provider/entities/runner-daily-metric.entity'
+import { DAY_MS, formatUtcDay } from '../../provider/utils/date-range.util'
 import { MarketListing } from '../entities/market-listing.entity'
 import { MarketLease } from '../entities/market-lease.entity'
 import { MarketLeaseStatus } from '../enums/market-lease-status.enum'
@@ -21,6 +24,7 @@ import {
   CreateMarketListingDto,
   MarketListingDto,
   MarketListingSort,
+  MarketReputationDto,
   UpdateMarketListingDto,
 } from '../dto/market-listing.dto'
 
@@ -39,6 +43,10 @@ export class MarketListingsService {
     private readonly runnerRepository: Repository<Runner>,
     @InjectRepository(RunnerPricing)
     private readonly pricingRepository: Repository<RunnerPricing>,
+    @InjectRepository(RunnerDailyMetric)
+    private readonly dailyMetricRepository: Repository<RunnerDailyMetric>,
+    @InjectRepository(RunnerAlert)
+    private readonly alertRepository: Repository<RunnerAlert>,
     private readonly regionService: RegionService,
     private readonly organizationService: OrganizationService,
     private readonly configService: TypedConfigService,
@@ -63,22 +71,31 @@ export class MarketListingsService {
         }
       }
     }
-    return this.toDtos(this.sortListings(listings, options.sort))
+    return this.sortDtos(await this.toDtos(listings), options.sort)
   }
 
-  private sortListings(listings: MarketListing[], sort: MarketListingSort = 'newest'): MarketListing[] {
-    const hourlyPrice = (listing: MarketListing) =>
+  private sortDtos(dtos: MarketListingDto[], sort: MarketListingSort = 'newest'): MarketListingDto[] {
+    const hourlyPrice = (listing: MarketListingDto) =>
       listing.cpuHourCents + listing.memoryGiBHourCents + listing.diskGiBHourCents
+    const successRate = (listing: MarketListingDto) => listing.reputation?.startupSuccessRatePct ?? -1
 
     switch (sort) {
       case 'price_asc':
-        return [...listings].sort((a, b) => hourlyPrice(a) - hourlyPrice(b))
+        return [...dtos].sort((a, b) => hourlyPrice(a) - hourlyPrice(b))
       case 'price_desc':
-        return [...listings].sort((a, b) => hourlyPrice(b) - hourlyPrice(a))
+        return [...dtos].sort((a, b) => hourlyPrice(b) - hourlyPrice(a))
       case 'capacity_desc':
-        return [...listings].sort((a, b) => b.totalCpu - a.totalCpu)
+        return [...dtos].sort((a, b) => b.totalCpu - a.totalCpu)
+      case 'reputation_desc':
+        return [...dtos].sort(
+          (a, b) =>
+            (b.reputation?.availabilityScore ?? 0) - (a.reputation?.availabilityScore ?? 0) ||
+            successRate(b) - successRate(a),
+        )
+      case 'success_rate_desc':
+        return [...dtos].sort((a, b) => successRate(b) - successRate(a))
       default:
-        return [...listings].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+        return [...dtos].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     }
   }
 
@@ -129,6 +146,8 @@ export class MarketListingsService {
       gpuHourCents: dto.gpuHourCents ?? 0,
       ...capacity,
       maxSandboxes: dto.maxSandboxes ?? 10,
+      ...(dto.slaAvailabilityPct !== undefined ? { slaAvailabilityPct: dto.slaAvailabilityPct } : {}),
+      ...(dto.slaCompensationBps !== undefined ? { slaCompensationBps: dto.slaCompensationBps } : {}),
       visibility: MarketListingVisibility.PUBLIC,
       status,
     }
@@ -168,6 +187,8 @@ export class MarketListingsService {
       ...(dto.gpuHourCents !== undefined ? { gpuHourCents: dto.gpuHourCents } : {}),
       ...capacity,
       ...(dto.maxSandboxes !== undefined ? { maxSandboxes: dto.maxSandboxes } : {}),
+      ...(dto.slaAvailabilityPct !== undefined ? { slaAvailabilityPct: dto.slaAvailabilityPct } : {}),
+      ...(dto.slaCompensationBps !== undefined ? { slaCompensationBps: dto.slaCompensationBps } : {}),
       ...(dto.status !== undefined ? { status: dto.status } : {}),
     })
     const saved = await this.listingRepository.save(listing)
@@ -318,10 +339,12 @@ export class MarketListingsService {
     }
     const regionNames = await this.resolveRegionNames(listings.map((listing) => listing.regionId))
     const leaseCounts = await this.resolveActiveLeaseCounts(listings.map((listing) => listing.id))
+    const reputations = await this.computeRegionReputations([...new Set(listings.map((listing) => listing.regionId))])
     return listings.map((listing) =>
       MarketListingDto.fromEntity(listing, {
         regionName: regionNames.get(listing.regionId) ?? null,
         activeLeaseCount: leaseCounts.get(listing.id) ?? 0,
+        reputation: reputations.get(listing.regionId) ?? null,
       }),
     )
   }
@@ -329,6 +352,89 @@ export class MarketListingsService {
   private async toDto(listing: MarketListing): Promise<MarketListingDto> {
     const [dto] = await this.toDtos([listing])
     return dto
+  }
+
+  /**
+   * Reputation of a listing region, aggregated from its runners' availability scores,
+   * the last 7 days of sandbox start metrics and open node alerts.
+   */
+  private async computeRegionReputations(regionIds: string[]): Promise<Map<string, MarketReputationDto>> {
+    const result = new Map<string, MarketReputationDto>()
+    if (regionIds.length === 0) {
+      return result
+    }
+
+    const runners = await this.runnerRepository.find({ where: { region: In(regionIds) } })
+    if (runners.length === 0) {
+      return result
+    }
+    const runnerIds = runners.map((runner) => runner.id)
+    const fromDate = formatUtcDay(new Date(Date.now() - 7 * DAY_MS))
+
+    const [metricRows, alertRows] = await Promise.all([
+      this.dailyMetricRepository
+        .createQueryBuilder('metric')
+        .select('metric."runnerId"', 'runnerId')
+        .addSelect('COALESCE(SUM(metric."sandboxStarts"), 0)', 'starts')
+        .addSelect('COALESCE(SUM(metric."sandboxStartFailures"), 0)', 'failures')
+        .addSelect('COALESCE(SUM(metric."totalStartupSeconds"), 0)', 'startupSeconds')
+        .where('metric."runnerId" IN (:...runnerIds)', { runnerIds })
+        .andWhere('metric."date" >= :fromDate', { fromDate })
+        .groupBy('metric."runnerId"')
+        .getRawMany<{ runnerId: string; starts: string; failures: string; startupSeconds: string }>(),
+      this.alertRepository
+        .createQueryBuilder('alert')
+        .select('alert."runnerId"', 'runnerId')
+        .addSelect('COUNT(*)', 'count')
+        .where('alert."runnerId" IN (:...runnerIds)', { runnerIds })
+        .andWhere('alert."resolvedAt" IS NULL')
+        .groupBy('alert."runnerId"')
+        .getRawMany<{ runnerId: string; count: string }>(),
+    ])
+
+    const metricsByRunner = new Map(
+      metricRows.map((row) => [
+        row.runnerId,
+        {
+          starts: Number(row.starts),
+          failures: Number(row.failures),
+          startupSeconds: Number(row.startupSeconds),
+        },
+      ]),
+    )
+    const alertsByRunner = new Map(alertRows.map((row) => [row.runnerId, Number(row.count)]))
+
+    for (const regionId of regionIds) {
+      const regionRunners = runners.filter((runner) => runner.region === regionId)
+      let starts = 0
+      let failures = 0
+      let startupSeconds = 0
+      let availabilitySum = 0
+      let openAlertCount = 0
+
+      for (const runner of regionRunners) {
+        availabilitySum += runner.availabilityScore ?? 0
+        openAlertCount += alertsByRunner.get(runner.id) ?? 0
+        const metrics = metricsByRunner.get(runner.id)
+        if (metrics) {
+          starts += metrics.starts
+          failures += metrics.failures
+          startupSeconds += metrics.startupSeconds
+        }
+      }
+
+      const completed = Math.max(starts - failures, 0)
+      result.set(regionId, {
+        availabilityScore: Math.round((availabilitySum / Math.max(regionRunners.length, 1)) * 10) / 10,
+        startupSuccessRatePct: starts > 0 ? Math.round((completed / starts) * 1000) / 10 : null,
+        avgStartupSeconds: completed > 0 ? Math.round((startupSeconds / completed) * 100) / 100 : null,
+        sandboxStarts7d: starts,
+        sandboxStartFailures7d: failures,
+        openAlertCount,
+      })
+    }
+
+    return result
   }
 
   private async resolveRegionNames(regionIds: string[]): Promise<Map<string, string>> {

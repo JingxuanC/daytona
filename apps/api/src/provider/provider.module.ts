@@ -9,6 +9,7 @@ import { OrganizationModule } from '../organization/organization.module'
 import { RegionModule } from '../region/region.module'
 import { Runner } from '../sandbox/entities/runner.entity'
 import { SandboxModule } from '../sandbox/sandbox.module'
+import { MarketModule } from '../market/market.module'
 import { SandboxUsagePeriodArchive } from '../usage/entities/sandbox-usage-period-archive.entity'
 import { SandboxUsagePeriod } from '../usage/entities/sandbox-usage-period.entity'
 import { AdminProviderController } from './controllers/admin-provider.controller'
@@ -30,6 +31,7 @@ import { ProviderUsageService } from './services/provider-usage.service'
   imports: [
     OrganizationModule,
     SandboxModule,
+    MarketModule,
     RegionModule,
     TypeOrmModule.forFeature([
       SandboxUsagePeriod,

@@ -93,6 +93,18 @@ export class CreateMarketListingDto {
   @Min(1)
   maxSandboxes?: number
 
+  @ApiPropertyOptional({ description: 'SLA availability target percent', example: 99, minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  slaAvailabilityPct?: number
+
+  @ApiPropertyOptional({ description: 'SLA compensation in basis points of a day charge', example: 500, minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  slaCompensationBps?: number
+
   @ApiPropertyOptional({
     description:
       'Listing status after publish. Defaults to published (or pending_approval when the platform requires approval).',
@@ -182,13 +194,32 @@ export class UpdateMarketListingDto {
   @Min(1)
   maxSandboxes?: number
 
+  @ApiPropertyOptional({ description: 'SLA availability target percent', minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  slaAvailabilityPct?: number
+
+  @ApiPropertyOptional({ description: 'SLA compensation in basis points of a day charge', minimum: 0 })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  slaCompensationBps?: number
+
   @ApiPropertyOptional({ description: 'Listing status', enum: MarketListingStatus })
   @IsOptional()
   @IsEnum(MarketListingStatus)
   status?: MarketListingStatus
 }
 
-export const MARKET_LISTING_SORTS = ['newest', 'price_asc', 'price_desc', 'capacity_desc'] as const
+export const MARKET_LISTING_SORTS = [
+  'newest',
+  'price_asc',
+  'price_desc',
+  'capacity_desc',
+  'reputation_desc',
+  'success_rate_desc',
+] as const
 export type MarketListingSort = (typeof MARKET_LISTING_SORTS)[number]
 
 @ApiSchema({ name: 'MarketListingsQuery' })
@@ -201,6 +232,30 @@ export class MarketListingsQueryDto {
   @IsOptional()
   @IsIn(MARKET_LISTING_SORTS)
   sort?: MarketListingSort
+}
+
+@ApiSchema({ name: 'MarketReputation' })
+export class MarketReputationDto {
+  @ApiProperty({ description: 'Average availability score of the region runners (0-100)', example: 92.5 })
+  availabilityScore: number
+
+  @ApiProperty({ description: 'Sandbox start success rate over the last 7 days, null when no samples', nullable: true })
+  startupSuccessRatePct: number | null
+
+  @ApiProperty({
+    description: 'Average sandbox startup seconds over the last 7 days, null when no samples',
+    nullable: true,
+  })
+  avgStartupSeconds: number | null
+
+  @ApiProperty({ description: 'Sandbox starts on the region runners over the last 7 days' })
+  sandboxStarts7d: number
+
+  @ApiProperty({ description: 'Failed sandbox starts over the last 7 days' })
+  sandboxStartFailures7d: number
+
+  @ApiProperty({ description: 'Open node alerts on the region runners' })
+  openAlertCount: number
 }
 
 @ApiSchema({ name: 'MarketListing' })
@@ -268,8 +323,17 @@ export class MarketListingDto {
   @ApiProperty()
   platformFeeBps: number
 
+  @ApiProperty({ description: 'SLA availability target percent', example: 99 })
+  slaAvailabilityPct: number
+
+  @ApiProperty({ description: 'SLA compensation in basis points of a day charge', example: 500 })
+  slaCompensationBps: number
+
   @ApiPropertyOptional({ description: 'Number of active leases on this listing', example: 1 })
   activeLeaseCount?: number
+
+  @ApiPropertyOptional({ type: MarketReputationDto, description: 'Node reputation of the listing region' })
+  reputation?: MarketReputationDto | null
 
   @ApiProperty({ type: String, format: 'date-time' })
   createdAt: Date
@@ -279,7 +343,11 @@ export class MarketListingDto {
 
   static fromEntity(
     listing: MarketListing,
-    extra?: { regionName?: string | null; activeLeaseCount?: number },
+    extra?: {
+      regionName?: string | null
+      activeLeaseCount?: number
+      reputation?: MarketReputationDto | null
+    },
   ): MarketListingDto {
     return {
       id: listing.id,
@@ -303,7 +371,10 @@ export class MarketListingDto {
       visibility: listing.visibility,
       status: listing.status,
       platformFeeBps: listing.platformFeeBps,
+      slaAvailabilityPct: listing.slaAvailabilityPct,
+      slaCompensationBps: listing.slaCompensationBps,
       activeLeaseCount: extra?.activeLeaseCount,
+      reputation: extra?.reputation ?? null,
       createdAt: listing.createdAt,
       updatedAt: listing.updatedAt,
     }

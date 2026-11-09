@@ -187,3 +187,44 @@
 | 验收 | `scripts/accept-compute-market.sh` 扩展 M2/M3：充值 → 租用 → 跨组织沙箱 → 排序断言 → 运营概览 → 扣费/账本/抽成断言 → 关租约回收 → 清理（25 项检查） |
 
 未做（后续方向）：信誉排序（需要跨组织暴露节点可用性指标）、竞价/抢占、SLA 赔付、退款/对账 UI、多实例账本并发。
+
+---
+
+## 10. M4 实现（运营后台 / 风控 / 市场机制，已落地）
+
+### 10.1 运营后台（系统管理员）
+
+- **运行时设置**：新表 `market_settings`；`GET/PUT /api/admin/market/settings`（`platformFeeBps` 0–10000，写入后立即生效，优先于 `MARKET_PLATFORM_FEE_BPS` 环境变量）
+- **手动充值**：`POST /api/admin/market/credits/topup`（自托管无支付通道）
+- **运营概览**：`GET /api/admin/market/overview`（listing 状态分布、活跃租约、扣费/抽成合计、负余额组织、当前抽成率）
+- **风控手动触发**：`POST /api/admin/market/risk/run`
+- **Dashboard**：`/dashboard/admin/market` 页面（仅系统管理员；侧边栏 Platform 组），含抽成率配置、手动充值、负余额处置、立即执行风控；自托管需要把操作账号的 `user.role` 提升为 `admin`
+
+### 10.2 风控
+
+- 新表 `market_alerts`（`low_balance` / `negative_balance` / `sla_breach`，未解决去重、恢复自动 resolve）
+- `MarketRiskService`（SandboxModule 内，每 5 分钟）：
+  - 余额 < `MARKET_LOW_BALANCE_CENTS`（默认 100 分）→ `low_balance` 告警
+  - 余额 < 0 → `negative_balance` 告警 + **停止该组织在市场 region 的沙箱** + **关闭其市场租约并回收配额**
+  - 余额恢复 → 自动解除告警
+- 消费方：`GET /api/market/alerts`；Dashboard「账户」tab 展示告警与 SLA 补偿记录
+
+### 10.3 市场机制 M4
+
+| 能力 | 实现 |
+|---|---|
+| 信誉指标 | listing 返回 `reputation`：region 内节点平均可用性、7 日启动成功率/平均启动耗时/启动失败数、未解决节点告警数；排序 `reputation_desc` / `success_rate_desc` |
+| 竞价 | 新表 `market_bids`；消费方 `POST/GET /api/market/bids`、`POST .../:id/withdraw`；提供方 `GET /api/provider/market/bids`、`.../:id/accept`（按出价快照创建租约）、`.../:id/reject`；同一 (consumer, listing) 仅一个 pending 出价 |
+| SLA 赔付 | listing 增加 `slaAvailabilityPct`（默认 99）与 `slaCompensationBps`（默认 500）；扣费后评估该日 region 节点启动成功率，未达标则向消费方发放 **平台垫付** 补偿（`sla_compensation` 账本条目 + `market_sla_events` 记录 + `sla_breach` 告警），提供方净收益不变（M4 简化，M5 可改为从提供方结算扣减） |
+
+### 10.4 验收
+
+`scripts/accept-compute-market.sh` 扩展为 M1–M4 全链路，**36 项检查全绿**：
+上架 → 充值 → 抽成率运行时配置 → 竞价（出价/接受/撤回）→ 租用 → 排序/运营概览 →
+跨组织沙箱 → 用量/结算 → 扣费/账本/抽成/SLA 补偿 → 负余额风控（告警/停沙箱/关租约/恢复解除）→ 关租约回收 → 清理。
+
+### 10.5 已知限制
+
+- SLA 补偿为平台垫付（不扣提供方收益），且只按「启动成功率」评估，未覆盖可用性/时延
+- 竞价无底价撮合/自动接受；出价被接受后价格快照固定
+- 运营后台未做权限细分（仅 system admin）；账本并发仍为单实例串行

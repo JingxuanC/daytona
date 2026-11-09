@@ -75,6 +75,14 @@ export class MarketListing {
   @Column({ type: 'enum', enum: MarketListingStatus, default: MarketListingStatus.PUBLISHED })
   status: MarketListingStatus
 
+  /** SLA availability target (percent) used for daily breach evaluation. */
+  @Column({ type: 'int', default: 99 })
+  slaAvailabilityPct: number
+
+  /** Compensation paid to the consumer on breach, in basis points of that day's charge. */
+  @Column({ type: 'int', default: 500 })
+  slaCompensationBps: number
+
   @Column({ type: 'int', default: 0 })
   platformFeeBps: number
 

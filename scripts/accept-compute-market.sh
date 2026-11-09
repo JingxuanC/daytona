@@ -107,15 +107,17 @@ for _ in $(seq 1 15); do
   sleep 2
 done
 psql_db "UPDATE sandbox SET state='destroyed', \"desiredState\"='destroyed' WHERE \"organizationId\"='$CONSUMER_ORG' AND \"snapshot\"='$SNAPSHOT_NAME' AND state <> 'destroyed'" >/dev/null || true
-psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG' AND \"referenceId\" IN (SELECT id::text FROM market_usage_charges WHERE \"consumerOrganizationId\"='$CONSUMER_ORG')" >/dev/null || true
-psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG' AND \"description\"='E2E topup'" >/dev/null || true
+psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG'" >/dev/null || true
+psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG'" >/dev/null || true
+psql_db "DELETE FROM market_sla_events WHERE \"consumerOrganizationId\"='$CONSUMER_ORG'" >/dev/null || true
+psql_db "DELETE FROM market_bids WHERE \"consumerOrganizationId\"='$CONSUMER_ORG'" >/dev/null || true
 psql_db "DELETE FROM market_usage_charges WHERE \"consumerOrganizationId\"='$CONSUMER_ORG'" >/dev/null || true
-psql_db "DELETE FROM market_leases WHERE \"consumerOrganizationId\"='$CONSUMER_ORG' AND \"listingId\"::text NOT IN (SELECT id::text FROM market_listings)" >/dev/null || true
+psql_db "DELETE FROM market_leases WHERE \"consumerOrganizationId\"='$CONSUMER_ORG'" >/dev/null || true
 ok "旧测试数据已清理"
 
 # ---------- 3. provider 上架 ----------
 info "3. provider 上架容量（100/10/1 分，容量 8c/16GiB/50GiB）"
-LISTING_RESP=$(api POST /provider/market/listings "$PROVIDER_KEY" "{\"regionId\":\"$REGION_ID\",\"name\":\"$LISTING_NAME\",\"cpuHourCents\":100,\"memoryGiBHourCents\":10,\"diskGiBHourCents\":1,\"totalCpu\":8,\"totalMemoryGiB\":16,\"totalDiskGiB\":50,\"maxCpuPerSandbox\":4,\"maxMemoryPerSandbox\":8,\"maxDiskPerSandbox\":20}")
+LISTING_RESP=$(api POST /provider/market/listings "$PROVIDER_KEY" "{\"regionId\":\"$REGION_ID\",\"name\":\"$LISTING_NAME\",\"cpuHourCents\":100,\"memoryGiBHourCents\":10,\"diskGiBHourCents\":1,\"totalCpu\":8,\"totalMemoryGiB\":16,\"totalDiskGiB\":50,\"maxCpuPerSandbox\":4,\"maxMemoryPerSandbox\":8,\"maxDiskPerSandbox\":20,\"slaAvailabilityPct\":99,\"slaCompensationBps\":5000}")
 LISTING_ID=$(echo "$LISTING_RESP" | head -1 | json_get id)
 [ -n "$LISTING_ID" ] || { fail "上架失败：$LISTING_RESP"; exit 1; }
 ok "listingId=$LISTING_ID"
@@ -124,6 +126,28 @@ info "3.5. M2：为 consumer 充值 1000 分并校验余额"
 TOPUP=$(api POST /admin/market/credits/topup "$ADMIN_KEY" "{\"organizationId\":\"$CONSUMER_ORG\",\"amountCents\":1000,\"description\":\"E2E topup\"}")
 BALANCE=$(echo "$TOPUP" | head -1 | json_get balanceCents)
 [ "${BALANCE:-0}" = "1000" ] && ok "余额已充值：$BALANCE 分" || fail "充值失败：$TOPUP"
+
+info "3.2. M4：平台抽成率运行时配置"
+SETTINGS_SET=$(api PUT /admin/market/settings "$ADMIN_KEY" '{"platformFeeBps":1000}')
+SET_BPS=$(echo "$SETTINGS_SET" | head -1 | json_get platformFeeBps)
+[ "${SET_BPS:-0}" = "1000" ] && ok "抽成率已写入运行时设置（10%）" || fail "抽成率写入失败：$SETTINGS_SET"
+SETTINGS_GET=$(api GET /admin/market/settings "$ADMIN_KEY" | head -1 | json_get platformFeeBps)
+[ "${SETTINGS_GET:-0}" = "1000" ] && ok "抽成率读取正确" || fail "抽成率读取异常：$SETTINGS_GET"
+
+info "3.6. M4：竞价（出价 → 提供方接受 → 租约按出价快照）"
+BID_RESP=$(api POST /market/bids "$ADMIN_KEY" "{\"listingId\":\"$LISTING_ID\",\"cpuHourCents\":80,\"memoryGiBHourCents\":8,\"diskGiBHourCents\":1,\"totalCpu\":4,\"totalMemoryGiB\":8,\"totalDiskGiB\":20}")
+BID_ID=$(echo "$BID_RESP" | head -1 | json_get id)
+[ -n "$BID_ID" ] && ok "已提交出价（80/8/1 分）" || fail "提交出价失败：$BID_RESP"
+PROV_BIDS=$(api GET /provider/market/bids "$PROVIDER_KEY")
+echo "$PROV_BIDS" | head -1 | grep -q "$BID_ID" && ok "提供方可见出价" || fail "提供方看不到出价"
+ACCEPT_RESP=$(api POST "/provider/market/bids/$BID_ID/accept" "$PROVIDER_KEY")
+ACCEPT_PRICE=$(echo "$ACCEPT_RESP" | head -1 | json_get cpuHourCents)
+[ "${ACCEPT_PRICE:-0}" = "80" ] && ok "提供方接受出价，租约价格快照=80" || fail "接受出价失败：$ACCEPT_RESP"
+BID2_RESP=$(api POST /market/bids "$ADMIN_KEY" "{\"listingId\":\"$LISTING_ID\",\"cpuHourCents\":70,\"memoryGiBHourCents\":7,\"diskGiBHourCents\":1,\"totalCpu\":2,\"totalMemoryGiB\":4,\"totalDiskGiB\":10}")
+BID2_ID=$(echo "$BID2_RESP" | head -1 | json_get id)
+WITHDRAW_RESP=$(api POST "/market/bids/$BID2_ID/withdraw" "$ADMIN_KEY")
+WITHDRAW_STATUS=$(echo "$WITHDRAW_RESP" | head -1 | json_get status)
+[ "$WITHDRAW_STATUS" = "withdrawn" ] && ok "消费者可撤回出价" || fail "撤回出价失败：$WITHDRAW_RESP"
 
 # ---------- 4. consumer 浏览 + 租用 ----------
 info "4. consumer 浏览并租用 4c/8GiB/20GiB"
@@ -200,7 +224,9 @@ SETTLED=$(echo "$RECOMPUTE" | head -1 | json_get settled)
 SETTLEMENT_AMOUNT=$(api GET "/provider/settlements?from=$TODAY&to=$TODAY&runnerId=$READY_RUNNER" "$PROVIDER_KEY" | head -1 | json_get items.0.amountCents)
 [ "${SETTLEMENT_AMOUNT:-0}" -gt 0 ] && ok "provider 结算单金额=${SETTLEMENT_AMOUNT} 分" || fail "provider 结算单金额为 0"
 
-info "8.5. M2：扣费任务 + 账本 + 抽成校验"
+info "8.5. M2/M4：扣费任务 + 账本 + 抽成 + SLA 补偿"
+# 注入低启动成功率指标，触发 SLA 赔付（10 次启动 5 次失败 → 50% < 99%）
+psql_db "INSERT INTO runner_daily_metrics (\"id\",\"organizationId\",\"runnerId\",\"date\",\"sandboxStarts\",\"sandboxStartFailures\",\"totalStartupSeconds\") VALUES (uuid_generate_v4(),'$PROV_ORG','$READY_RUNNER','$TODAY',10,5,30) ON CONFLICT (\"runnerId\",\"date\") DO UPDATE SET \"sandboxStarts\"=10,\"sandboxStartFailures\"=5,\"totalStartupSeconds\"=30" >/dev/null || true
 CHARGED=$(api POST /admin/market/charges/recompute "$ADMIN_KEY" "{\"day\":\"$TODAY\"}" | head -1 | json_get charged)
 [ "${CHARGED:-0}" -ge 1 ] && ok "扣费任务执行（$CHARGED 个租约）" || fail "扣费任务未产生扣费：$CHARGED"
 CHARGE_AMOUNT=$(api GET "/market/charges?from=$TODAY&to=$TODAY" "$ADMIN_KEY" | head -1 | json_get items.0.amountCents)
@@ -208,17 +234,44 @@ CHARGE_FEE=$(api GET "/market/charges?from=$TODAY&to=$TODAY" "$ADMIN_KEY" | head
 CHARGE_NET=$(api GET "/market/charges?from=$TODAY&to=$TODAY" "$ADMIN_KEY" | head -1 | json_get items.0.providerNetCents)
 [ "${CHARGE_AMOUNT:-0}" -gt 0 ] && ok "扣费金额=$CHARGE_AMOUNT 分（平台费 $CHARGE_FEE / 净收益 ${CHARGE_NET}）" || fail "扣费金额为 0"
 [ "$(( CHARGE_FEE + CHARGE_NET ))" = "$CHARGE_AMOUNT" ] && ok "扣费拆分正确：平台费 + 净收益 = 扣费金额" || fail "扣费拆分不一致"
+SLA_ITEMS=$(api GET "/market/sla-events?from=$TODAY&to=$TODAY" "$ADMIN_KEY" | head -1)
+SLA_COMP=$(echo "$SLA_ITEMS" | python3 -c '
+import json, sys
+items = json.load(sys.stdin).get("items", [])
+print(sum(i.get("compensationCents", 0) for i in items))
+')
+[ "${SLA_COMP:-0}" -gt 0 ] && ok "SLA 未达标触发补偿：${SLA_COMP} 分" || fail "SLA 补偿未触发：$SLA_ITEMS"
 BALANCE_AFTER=$(api GET /market/credit "$ADMIN_KEY" | head -1 | json_get balanceCents)
-EXPECTED_BALANCE=$((1000 - CHARGE_AMOUNT))
-[ "${BALANCE_AFTER:-0}" = "$EXPECTED_BALANCE" ] && ok "账本余额正确：$BALANCE_AFTER 分" || fail "账本余额异常：${BALANCE_AFTER}（期望 ${EXPECTED_BALANCE}）"
+EXPECTED_BALANCE=$((1000 - CHARGE_AMOUNT + SLA_COMP))
+[ "${BALANCE_AFTER:-0}" = "$EXPECTED_BALANCE" ] && ok "账本余额正确（含 SLA 补偿）：$BALANCE_AFTER 分" || fail "账本余额异常：${BALANCE_AFTER}（期望 ${EXPECTED_BALANCE}）"
 SETTLE_FEE=$(api GET "/provider/settlements?from=$TODAY&to=$TODAY&runnerId=$READY_RUNNER" "$PROVIDER_KEY" | head -1 | json_get items.0.platformFeeCents)
 SETTLE_NET=$(api GET "/provider/settlements?from=$TODAY&to=$TODAY&runnerId=$READY_RUNNER" "$PROVIDER_KEY" | head -1 | json_get items.0.netCents)
 SETTLE_AMOUNT=$(api GET "/provider/settlements?from=$TODAY&to=$TODAY&runnerId=$READY_RUNNER" "$PROVIDER_KEY" | head -1 | json_get items.0.amountCents)
 [ "$(( ${SETTLE_FEE:-0} + ${SETTLE_NET:-0} ))" = "${SETTLE_AMOUNT:-0}" ] && ok "结算抽成正确：费用 $SETTLE_FEE + 净额 $SETTLE_NET = 流水 $SETTLE_AMOUNT" || fail "结算抽成不一致"
 
+info "8.7. M4：风控（负余额 → 告警 + 停沙箱 + 关租约 + 恢复后解除）"
+psql_db "INSERT INTO market_credit_entries (\"organizationId\",type,\"amountCents\",\"balanceAfterCents\",currency,description,\"referenceType\",\"createdAt\") SELECT '$CONSUMER_ORG','adjustment',-100000, COALESCE((SELECT \"balanceAfterCents\" FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG' ORDER BY \"createdAt\" DESC LIMIT 1),0) - 100000, 'CNY','E2E negative balance','manual',now()" >/dev/null
+api POST /admin/market/risk/run "$ADMIN_KEY" >/dev/null
+ALERTS=$(api GET "/market/alerts?state=all" "$ADMIN_KEY" | head -1)
+echo "$ALERTS" | grep -q "negative_balance" && ok "负余额告警已触发" || fail "负余额告警未触发：$ALERTS"
+LEASE_STATUS=$(api GET /market/leases "$ADMIN_KEY" | head -1 | python3 -c '
+import json, sys
+target = sys.argv[1]
+items = json.load(sys.stdin).get("items", [])
+match = [i for i in items if i.get("id") == target]
+print(match[0].get("status", "") if match else "")
+' "$LEASE_ID")
+[ "$LEASE_STATUS" = "closed" ] && ok "负余额自动关闭租约" || fail "租约未关闭（status=${LEASE_STATUS}）"
+SB_STATE=$(api GET "/sandbox/$SANDBOX_ID" "$ADMIN_KEY" | head -1 | json_get state)
+case "$SB_STATE" in stopped|stopping|destroyed) ok "负余额自动停止市场沙箱（state=${SB_STATE}）";; *) fail "沙箱未被停止（state=${SB_STATE}）";; esac
+api POST /admin/market/credits/topup "$ADMIN_KEY" "{\"organizationId\":\"$CONSUMER_ORG\",\"amountCents\":200000,\"description\":\"E2E risk recovery\"}" >/dev/null
+api POST /admin/market/risk/run "$ADMIN_KEY" >/dev/null
+OPEN_ALERTS=$(api GET "/market/alerts" "$ADMIN_KEY" | head -1 | python3 -c 'import json,sys; print(len(json.load(sys.stdin).get("items",[])))')
+[ "${OPEN_ALERTS:-1}" = "0" ] && ok "充值恢复后告警自动解除" || fail "告警未解除（剩余 $OPEN_ALERTS 条）"
+
 # ---------- 9. 关租约后拒绝新建沙箱 ----------
 info "9. 关闭租约，验证授权回收"
-api POST "/market/leases/$LEASE_ID/close" "$ADMIN_KEY" >/dev/null
+api POST "/market/leases/$LEASE_ID/close" "$ADMIN_KEY" >/dev/null || true
 REGIONS_AFTER=$(api GET /regions "$ADMIN_KEY")
 if echo "$REGIONS_AFTER" | head -1 | grep -q "$REGION_ID"; then fail "关闭租约后 region 仍然可见"; else ok "market region 已从可用列表移除"; fi
 REJECT=$(api POST /sandbox "$ADMIN_KEY" "{\"snapshot\":\"$SNAPSHOT_NAME\",\"target\":\"$REGION_ID\"}")
@@ -235,11 +288,17 @@ done
 psql_db "UPDATE sandbox SET state='destroyed', \"desiredState\"='destroyed' WHERE id='$SANDBOX_ID'" >/dev/null || true
 delete_snapshot_and_wait
 curl -s -X DELETE "$API/provider/market/listings/$LISTING_ID" -H "Authorization: Bearer $PROVIDER_KEY" >/dev/null || true
-psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG' AND \"referenceId\" IN (SELECT id::text FROM market_usage_charges WHERE \"listingId\"='$LISTING_ID')" >/dev/null || true
-psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG' AND \"description\"='E2E topup'" >/dev/null || true
+psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG'" >/dev/null || true
+psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG'" >/dev/null || true
+psql_db "DELETE FROM market_sla_events WHERE \"leaseId\" IN (SELECT id FROM market_leases WHERE \"listingId\"='$LISTING_ID')" >/dev/null || true
+psql_db "DELETE FROM market_bids WHERE \"listingId\"='$LISTING_ID'" >/dev/null || true
 psql_db "DELETE FROM market_usage_charges WHERE \"listingId\"='$LISTING_ID'" >/dev/null || true
+psql_db "DELETE FROM market_sla_events WHERE \"consumerOrganizationId\"='$CONSUMER_ORG'" >/dev/null || true
+psql_db "DELETE FROM market_bids WHERE \"consumerOrganizationId\"='$CONSUMER_ORG'" >/dev/null || true
 psql_db "DELETE FROM market_leases WHERE \"listingId\"='$LISTING_ID'" >/dev/null || true
 psql_db "DELETE FROM market_listings WHERE id='$LISTING_ID'" >/dev/null || true
+psql_db "DELETE FROM runner_daily_metrics WHERE \"runnerId\"='$READY_RUNNER' AND \"date\"='$TODAY'" >/dev/null || true
+psql_db "DELETE FROM market_credit_entries WHERE \"organizationId\"='$CONSUMER_ORG'" >/dev/null || true
 psql_db "DELETE FROM api_key WHERE name='$PROVIDER_KEY_NAME'" >/dev/null || true
 # 恢复 region 的原状（脚本会开启配额校验并创建 provider 自用配额）
 psql_db "DELETE FROM region_quota WHERE \"regionId\"='$REGION_ID' AND \"organizationId\"='$PROV_ORG'" >/dev/null || true

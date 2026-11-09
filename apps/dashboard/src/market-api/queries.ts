@@ -10,6 +10,9 @@ import { useMemo } from 'react'
 import { useAuth } from 'react-oidc-context'
 import { MarketApiClient } from './client'
 import type {
+  CreateMarketBidPayload,
+  MarketAlertsResponse,
+  MarketBidsResponse,
   MarketChargesQuery,
   MarketChargesResponse,
   MarketCreditResponse,
@@ -17,6 +20,9 @@ import type {
   MarketListingSort,
   MarketListingsResponse,
   MarketUsageQuery,
+  MarketOverview,
+  MarketSettings,
+  MarketSlaEventsResponse,
   MarketUsageResponse,
   OpenMarketLeasePayload,
   PublishMarketListingPayload,
@@ -228,6 +234,173 @@ export function useRetireMarketListingMutation() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: marketQueryKeys.providerListings(organizationId) })
       queryClient.invalidateQueries({ queryKey: marketQueryKeys.listings(organizationId) })
+    },
+  })
+}
+
+export function useMarketAlertsQuery() {
+  const { api, organizationId, enabled } = useMarketScope()
+
+  return useQuery<MarketAlertsResponse>({
+    queryKey: [...marketQueryKeys.all, organizationId, 'alerts'],
+    queryFn: () => api.listAlerts(),
+    enabled,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+  })
+}
+
+export function useMarketSlaEventsQuery(query: { from?: string; to?: string } | null) {
+  const { api, organizationId, enabled } = useMarketScope()
+
+  return useQuery<MarketSlaEventsResponse>({
+    queryKey: [...marketQueryKeys.all, organizationId, 'sla', query],
+    queryFn: () => {
+      if (!query) {
+        throw new Error('Missing SLA query')
+      }
+      return api.listSlaEvents(query)
+    },
+    enabled: enabled && Boolean(query?.from && query?.to),
+    staleTime: 30_000,
+  })
+}
+
+export function useMarketBidsQuery() {
+  const { api, organizationId, enabled } = useMarketScope()
+
+  return useQuery<MarketBidsResponse>({
+    queryKey: [...marketQueryKeys.all, organizationId, 'bids'],
+    queryFn: () => api.listBids(),
+    enabled,
+    staleTime: 15_000,
+  })
+}
+
+export function useCreateMarketBidMutation() {
+  const { api, organizationId } = useMarketScope()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (payload: CreateMarketBidPayload) => api.createBid(payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...marketQueryKeys.all, organizationId, 'bids'] })
+    },
+  })
+}
+
+export function useWithdrawMarketBidMutation() {
+  const { api, organizationId } = useMarketScope()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (bidId: string) => api.withdrawBid(bidId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...marketQueryKeys.all, organizationId, 'bids'] })
+    },
+  })
+}
+
+export function useProviderMarketBidsQuery(enabled = true) {
+  const { api, organizationId, enabled: scopeEnabled } = useMarketScope()
+
+  return useQuery<MarketBidsResponse>({
+    queryKey: [...marketQueryKeys.all, organizationId, 'provider', 'bids'],
+    queryFn: () => api.listProviderBids(),
+    enabled: enabled && scopeEnabled,
+    staleTime: 15_000,
+  })
+}
+
+export function useAcceptMarketBidMutation() {
+  const { api, organizationId } = useMarketScope()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (bidId: string) => api.acceptBid(bidId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...marketQueryKeys.all, organizationId, 'provider'] })
+    },
+  })
+}
+
+export function useRejectMarketBidMutation() {
+  const { api, organizationId } = useMarketScope()
+  const queryClient = useQueryClient()
+
+  return useMutation({
+    mutationFn: (bidId: string) => api.rejectBid(bidId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [...marketQueryKeys.all, organizationId, 'provider', 'bids'] })
+    },
+  })
+}
+
+export function useMarketSettingsQuery() {
+  const { api } = useMarketScope()
+
+  return useQuery<MarketSettings>({
+    queryKey: ['market', 'admin', 'settings'],
+    queryFn: () => api.getSettings(),
+    staleTime: 30_000,
+    retry: false,
+  })
+}
+
+export function useMarketOverviewQuery(enabled = true) {
+  const { api } = useMarketScope()
+
+  return useQuery<MarketOverview>({
+    queryKey: ['market', 'admin', 'overview'],
+    queryFn: () => api.getOverview(),
+    enabled,
+    staleTime: 15_000,
+    refetchInterval: 30_000,
+    retry: false,
+  })
+}
+
+export function useUpdateMarketSettingsMutation() {
+  const queryClient = useQueryClient()
+  const { api } = useMarketScope()
+
+  return useMutation({
+    mutationFn: (platformFeeBps: number) => api.updateSettings(platformFeeBps),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['market', 'admin', 'settings'] })
+      queryClient.invalidateQueries({ queryKey: ['market', 'admin', 'overview'] })
+    },
+  })
+}
+
+export function useAdminMarketTopupMutation() {
+  const queryClient = useQueryClient()
+  const { api } = useMarketScope()
+
+  return useMutation({
+    mutationFn: ({
+      organizationId,
+      amountCents,
+      description,
+    }: {
+      organizationId: string
+      amountCents: number
+      description?: string
+    }) => api.topUp(organizationId, amountCents, description),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['market', 'admin', 'overview'] })
+    },
+  })
+}
+
+export function useRunMarketRiskMutation() {
+  const queryClient = useQueryClient()
+  const { api } = useMarketScope()
+
+  return useMutation({
+    mutationFn: () => api.runRiskControl(),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['market', 'admin', 'overview'] })
     },
   })
 }
