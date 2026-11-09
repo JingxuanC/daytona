@@ -46,7 +46,7 @@ import {
   Users,
 } from 'lucide-react'
 import { AnimatePresence } from 'motion/react'
-import { useFeatureFlagEnabled } from 'posthog-js/react'
+import { useFeatureFlag } from '@/hooks/useFeatureFlag'
 import React, { useMemo } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router'
 import { AnimatedLogo } from './AnimatedLogo'
@@ -104,7 +104,7 @@ export function Sidebar({ isBannerVisible, billingEnabled, version }: SidebarPro
   const sidebar = useSidebar()
   const { isMobile, setOpenMobile } = sidebar
   const { authenticatedUserOrganizationMember, authenticatedUserHasPermission } = useSelectedOrganization()
-  const orgInfraEnabled = useFeatureFlagEnabled(FeatureFlags.ORGANIZATION_INFRASTRUCTURE)
+  const orgInfraEnabled = useFeatureFlag(FeatureFlags.ORGANIZATION_INFRASTRUCTURE)
 
   const sidebarItems = useMemo(() => {
     const arr: SidebarItem[] = [
