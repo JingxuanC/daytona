@@ -5,7 +5,7 @@
 
 import { BadRequestException, Injectable } from '@nestjs/common'
 import { InjectRepository } from '@nestjs/typeorm'
-import { Repository } from 'typeorm'
+import { FindOptionsWhere, IsNull, LessThan, MoreThan, Repository } from 'typeorm'
 import { RunnerService } from '../../sandbox/services/runner.service'
 import { SandboxUsagePeriodArchive } from '../../usage/entities/sandbox-usage-period-archive.entity'
 import { SandboxUsagePeriod } from '../../usage/entities/sandbox-usage-period.entity'
@@ -257,22 +257,25 @@ export class ProviderUsageService {
   }
 
   private async fetchPeriods<T extends SandboxUsagePeriod | SandboxUsagePeriodArchive>(
-    repository: Repository<T>,
+    repository: Pick<Repository<T>, 'find'>,
     organizationId: string,
     range: ResolvedDateRange,
     runnerId?: string,
   ): Promise<T[]> {
-    const qb = repository
-      .createQueryBuilder('period')
-      .where('period.organizationId = :organizationId', { organizationId })
-      .andWhere('period.startAt < :to', { to: range.to })
-      .andWhere('(period.endAt IS NULL OR period.endAt > :from)', { from: range.from })
+    const baseWhere = {
+      organizationId,
+      startAt: LessThan(range.to),
+      ...(runnerId ? { runnerId } : {}),
+    } as FindOptionsWhere<T>
 
-    if (runnerId) {
-      qb.andWhere('period.runnerId = :runnerId', { runnerId })
-    }
+    // Open periods always overlap the requested range; closed ones must end after the range
+    // starts. Splitting the query keeps the where clause simple and index friendly.
+    const [openPeriods, closedPeriods] = await Promise.all([
+      repository.find({ where: { ...baseWhere, endAt: IsNull() } as FindOptionsWhere<T> }),
+      repository.find({ where: { ...baseWhere, endAt: MoreThan(range.from) } as FindOptionsWhere<T> }),
+    ])
 
-    return qb.getMany()
+    return [...openPeriods, ...closedPeriods]
   }
 
   private async resolveRunnerNames(runnerIds: Set<string>): Promise<Map<string, string>> {

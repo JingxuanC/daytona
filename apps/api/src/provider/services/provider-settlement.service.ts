@@ -303,6 +303,16 @@ export class ProviderSettlementService implements TrackableJobExecutions, OnAppl
   }
 
   /**
+   * Platform (system admin) action: recompute the settlements of a UTC day. Useful for
+   * backfills and for fixing days priced before pricing was configured. Only PENDING
+   * settlements are touched. Returns the number of recomputed settlement rows.
+   */
+  async recomputeDay(day?: string): Promise<number> {
+    const dayLabel = day ?? formatUtcDay(new Date(Date.now() - DAY_MS))
+    return this.settleDay(dayLabel)
+  }
+
+  /**
    * Platform (system admin) action: mark a PENDING settlement as SETTLED.
    */
   async markSettled(id: string): Promise<void> {
