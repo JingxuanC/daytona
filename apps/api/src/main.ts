@@ -31,6 +31,9 @@ import { OrganizationResourcePermission } from './organization/enums/organizatio
 import { MicroserviceOptions, Transport } from '@nestjs/microservices'
 import { Partitioners } from 'kafkajs'
 import { isApiEnabled, isWorkerEnabled } from './common/utils/app-mode'
+import { INTERNAL_ROOST_GLOBAL_PREFIX_EXCLUDE } from './internal-roost/internal-roost.constants'
+import { internalRoostIsolationMiddleware } from './internal-roost/internal-roost.isolation.middleware'
+import { InternalRoostServerService } from './internal-roost/internal-roost.server.service'
 import cluster from 'node:cluster'
 import { Logger as PinoLogger, LoggerErrorInterceptor } from 'nestjs-pino'
 
@@ -108,7 +111,10 @@ async function bootstrap() {
   }
 
   const globalPrefix = 'api'
-  app.setGlobalPrefix(globalPrefix)
+  // Internal Roost API keeps the contract path `/internal/roost/v1/...` (no `/api`).
+  app.setGlobalPrefix(globalPrefix, { exclude: INTERNAL_ROOST_GLOBAL_PREFIX_EXCLUDE })
+  // ...and it is only reachable through the dedicated internal listener.
+  app.use(internalRoostIsolationMiddleware)
 
   const documentFactory = () => SwaggerModule.createDocument(app, getOpenApiConfig(configService.get('oidc.issuer')))
   SwaggerModule.setup('api', app, documentFactory, {
@@ -157,6 +163,8 @@ async function bootstrap() {
   if (isApiEnabled()) {
     await app.listen(port, host)
     Logger.log(`🚀 Roost API is running on: http://${host}:${port}/${globalPrefix}`)
+    // Dedicated internal listener for the Roost market service (loopback + mTLS).
+    await app.get(InternalRoostServerService).start(app)
   } else {
     await app.init()
     app.flushLogs()

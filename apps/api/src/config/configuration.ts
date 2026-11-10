@@ -356,6 +356,31 @@ const configuration = {
     force: process.env.DRAINING_FORCE === 'true',
   },
   dontServeDashboard: process.env.DONT_SERVE_DASHBOARD === 'true',
+  // Internal control-plane API for the Roost market service (`/internal/roost/v1`).
+  // It runs on its own listener (loopback by default) and is never exposed on the
+  // public `0.0.0.0:PORT` API.
+  internalRoost: {
+    enabled: process.env.INTERNAL_ROOST_ENABLED !== 'false',
+    port: parseInt(process.env.INTERNAL_ROOST_PORT || '3101', 10),
+    host: process.env.INTERNAL_ROOST_HOST || '127.0.0.1',
+    allowNonLoopback: process.env.INTERNAL_ROOST_ALLOW_NON_LOOPBACK === 'true',
+    tls: {
+      certPath: process.env.INTERNAL_ROOST_TLS_CERT_PATH,
+      keyPath: process.env.INTERNAL_ROOST_TLS_KEY_PATH,
+      caPath: process.env.INTERNAL_ROOST_TLS_CA_PATH,
+      clientCnAllowlist: (process.env.INTERNAL_ROOST_CLIENT_CN_ALLOWLIST || '')
+        .split(',')
+        .map((cn) => cn.trim())
+        .filter((cn) => cn.length > 0),
+    },
+    jwt: {
+      issuer: process.env.INTERNAL_ROOST_JWT_ISSUER || 'daytona',
+      privateKeyPath: process.env.INTERNAL_ROOST_JWT_PRIVATE_KEY_PATH,
+      publicKeyPath: process.env.INTERNAL_ROOST_JWT_PUBLIC_KEY_PATH,
+      privateKeyPem: process.env.INTERNAL_ROOST_JWT_PRIVATE_KEY,
+      publicKeyPem: process.env.INTERNAL_ROOST_JWT_PUBLIC_KEY,
+    },
+  },
 }
 
 export { configuration }
