@@ -25,7 +25,7 @@ type PreviewLinkArgs struct {
 
 func GetPreviewLinkTool() mcp.Tool {
 	return mcp.NewTool("preview_link",
-		mcp.WithDescription("Generate accessible preview URLs for web applications running in the Daytona sandbox. Creates a secure tunnel to expose local ports externally without configuration. Validates if a server is actually running on the specified port and provides diagnostic information for troubleshooting. Supports custom descriptions and metadata for better organization of multiple services."),
+		mcp.WithDescription("Generate accessible preview URLs for web applications running in the Roost sandbox. Creates a secure tunnel to expose local ports externally without configuration. Validates if a server is actually running on the specified port and provides diagnostic information for troubleshooting. Supports custom descriptions and metadata for better organization of multiple services."),
 		mcp.WithNumber("port", mcp.Required(), mcp.Description("Port to expose.")),
 		mcp.WithString("description", mcp.Required(), mcp.Description("Description of the service.")),
 		mcp.WithBoolean("checkServer", mcp.Required(), mcp.Description("Check if a server is running on the specified port.")),

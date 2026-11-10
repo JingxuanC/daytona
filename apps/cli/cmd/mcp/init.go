@@ -14,7 +14,7 @@ import (
 
 var InitCmd = &cobra.Command{
 	Use:   "init [AGENT_NAME]",
-	Short: "Initialize Daytona MCP Server with an agent (currently supported: claude, windsurf, cursor)",
+	Short: "Initialize Roost MCP Server with an agent (currently supported: claude, windsurf, cursor)",
 	Args:  cobra.MaximumNArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {

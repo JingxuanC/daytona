@@ -20,7 +20,7 @@ type DestroySandboxArgs struct {
 
 func GetDestroySandboxTool() mcp.Tool {
 	return mcp.NewTool("destroy_sandbox",
-		mcp.WithDescription("Destroy a sandbox with Daytona"),
+		mcp.WithDescription("Destroy a sandbox with Roost"),
 		mcp.WithString("id", mcp.Required(), mcp.Description("ID of the sandbox to destroy.")),
 	)
 }

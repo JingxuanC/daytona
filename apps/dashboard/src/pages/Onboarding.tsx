@@ -155,7 +155,7 @@ const Onboarding: React.FC = () => {
                 </div>
                 <div>
                   <h2 className="text-xl font-semibold mb-4">Install the SDK</h2>
-                  <p className="mb-4">Run the following command in your terminal to install the Daytona SDK:</p>
+                  <p className="mb-4">Run the following command in your terminal to install the SDK:</p>
                   <div className="transition-all duration-500">
                     <CodeBlock code={codeExamples[language].install} language="bash" showCopy />
                   </div>
@@ -338,7 +338,7 @@ const codeExamples = {
     run: `npx tsx index.mts`,
     example: `import { Daytona } from '@daytona/sdk'
 
-// Initialize the Daytona client
+// Initialize the Roost client
 const daytona = new Daytona({ apiKey: 'your-api-key' });
 
 // Create the Sandbox instance
@@ -359,7 +359,7 @@ console.log(response.result);
 # Define the configuration
 config = DaytonaConfig(api_key="your-api-key")
 
-# Initialize the Daytona client
+# Initialize the Roost client
 daytona = Daytona(config)
 
 # Create the Sandbox instance

@@ -166,7 +166,7 @@ export const REGISTRY_PROVIDER_SPECS: Record<RegistryProvider, ProviderFormSpec>
       placeholder: 'arn:aws:iam::123456789012:role/daytona-ecr-puller',
       helper: (
         <>
-          Daytona will assume this role on every pull.{' '}
+          Roost will assume this role on every pull.{' '}
           <a
             href={`${DAYTONA_DOCS_URL}/snapshots#amazon-elastic-container-registry-ecr`}
             target="_blank"

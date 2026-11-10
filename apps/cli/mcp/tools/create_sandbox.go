@@ -40,8 +40,8 @@ type CreateSandboxArgs struct {
 
 func GetCreateSandboxTool() mcp.Tool {
 	return mcp.NewTool("create_sandbox",
-		mcp.WithDescription("Create a new sandbox with Daytona"),
-		mcp.WithString("id", mcp.Description("If a sandbox ID is provided it is first checked if it exists and is running, if so, the existing sandbox will be used. However, a model is not able to provide custom sandbox ID but only the ones Daytona commands return and should always leave ID field empty if the intention is to create a new sandbox.")),
+		mcp.WithDescription("Create a new sandbox with Roost"),
+		mcp.WithString("id", mcp.Description("If a sandbox ID is provided it is first checked if it exists and is running, if so, the existing sandbox will be used. However, a model is not able to provide custom sandbox ID but only the ones Roost commands return and should always leave ID field empty if the intention is to create a new sandbox.")),
 		mcp.WithString("name", mcp.Description("Name of the sandbox. If not provided, the sandbox ID will be used as the name.")),
 		mcp.WithString("target", mcp.DefaultString("us"), mcp.Description("Target region of the sandbox.")),
 		mcp.WithString("snapshot", mcp.Description("Snapshot of the sandbox (don't specify any if not explicitly instructed from user). Cannot be specified when using a build info entry.")),

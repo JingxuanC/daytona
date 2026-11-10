@@ -21,7 +21,7 @@ type ListFilesArgs struct {
 
 func GetListFilesTool() mcp.Tool {
 	return mcp.NewTool("list_files",
-		mcp.WithDescription("List files in a directory in the Daytona sandbox."),
+		mcp.WithDescription("List files in a directory in the Roost sandbox."),
 		mcp.WithString("path", mcp.Description("Path to the directory to list files from (defaults to current directory).")),
 		mcp.WithString("id", mcp.Required(), mcp.Description("ID of the sandbox to list the files from.")),
 	)

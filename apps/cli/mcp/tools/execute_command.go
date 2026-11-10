@@ -30,7 +30,7 @@ type CommandResult struct {
 
 func GetExecuteCommandTool() mcp.Tool {
 	return mcp.NewTool("execute_command",
-		mcp.WithDescription("Execute shell commands in the ephemeral Daytona Linux environment. Returns full stdout and stderr output with exit codes. Commands have sandbox user permissions and can install packages, modify files, and interact with running services. Always use /tmp directory. Use verbose flags where available for better output."),
+		mcp.WithDescription("Execute shell commands in the ephemeral Roost Linux environment. Returns full stdout and stderr output with exit codes. Commands have sandbox user permissions and can install packages, modify files, and interact with running services. Always use /tmp directory. Use verbose flags where available for better output."),
 		mcp.WithString("command", mcp.Required(), mcp.Description("Command to execute.")),
 		mcp.WithString("id", mcp.Required(), mcp.Description("ID of the sandbox to execute the command in.")),
 	)

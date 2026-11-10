@@ -14,7 +14,7 @@ import (
 
 var ConfigCmd = &cobra.Command{
 	Use:   "config [AGENT_NAME]",
-	Short: "Outputs JSON configuration for Daytona MCP Server",
+	Short: "Outputs JSON configuration for Roost MCP Server",
 	Args:  cobra.NoArgs,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		homeDir, err := os.UserHomeDir()

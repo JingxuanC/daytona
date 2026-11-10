@@ -176,7 +176,7 @@ export class AppService implements OnApplicationBootstrap, OnApplicationShutdown
 
     const user = await this.userService.create({
       id: DAYTONA_ADMIN_USER_ID,
-      name: 'Daytona Admin',
+      name: 'Roost Admin',
       personalOrganizationQuota: {
         totalCpuQuota: this.configService.getOrThrow('admin.totalCpuQuota'),
         totalMemoryQuota: this.configService.getOrThrow('admin.totalMemoryQuota'),

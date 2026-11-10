@@ -31,7 +31,7 @@ export const PythonSnippetGenerator: CodeSnippetGenerator = {
   },
 
   getClientInit(p) {
-    return ['# Initialize the Daytona client', `daytona = Daytona(${p.actions.useConfigObject ? 'config' : ''})`]
+    return ['# Initialize the Roost client', `daytona = Daytona(${p.actions.useConfigObject ? 'config' : ''})`]
       .filter(Boolean)
       .join('\n')
   },

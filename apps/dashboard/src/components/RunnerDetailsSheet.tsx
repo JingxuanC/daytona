@@ -270,7 +270,7 @@ function SchedulingScore({ value }: { value?: number }) {
                 </button>
               </TooltipTrigger>
               <TooltipContent className="max-w-[260px]">
-                Higher is better. Daytona uses this score to choose runners for new sandboxes based on health and
+                Higher is better. Roost uses this score to choose runners for new sandboxes based on health and
                 remaining capacity.
               </TooltipContent>
             </Tooltip>

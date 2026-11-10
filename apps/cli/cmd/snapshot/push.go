@@ -28,7 +28,7 @@ import (
 var PushCmd = &cobra.Command{
 	Use:   "push [SNAPSHOT]",
 	Short: "Push local snapshot",
-	Long:  "Push a local Docker image to Daytona. To securely build it on our infrastructure, use 'daytona snapshot build'",
+	Long:  "Push a local Docker image to Roost. To securely build it on our infrastructure, use 'daytona snapshot build'",
 	Args:  cobra.ExactArgs(1),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()
@@ -153,7 +153,7 @@ var PushCmd = &cobra.Command{
 			return apiclient_cli.HandleErrorResponse(res, err)
 		}
 
-		views_common.RenderInfoMessageBold(fmt.Sprintf("Successfully pushed %s to Daytona", sourceImage))
+		views_common.RenderInfoMessageBold(fmt.Sprintf("Successfully pushed %s to Roost", sourceImage))
 
 		err = views_util.WithInlineSpinner("Waiting for the snapshot to be validated", func() error {
 			return common.AwaitSnapshotState(ctx, apiClient, nameFlag, apiclient.SNAPSHOTSTATE_ACTIVE)

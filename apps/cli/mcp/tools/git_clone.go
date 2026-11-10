@@ -26,7 +26,7 @@ type GitCloneArgs struct {
 
 func GetGitCloneTool() mcp.Tool {
 	return mcp.NewTool("git_clone",
-		mcp.WithDescription("Clone a Git repository into the Daytona sandbox."),
+		mcp.WithDescription("Clone a Git repository into the Roost sandbox."),
 		mcp.WithString("url", mcp.Required(), mcp.Description("URL of the Git repository to clone.")),
 		mcp.WithString("path", mcp.Description("Directory to clone the repository into (defaults to current directory).")),
 		mcp.WithString("branch", mcp.Description("Branch to clone.")),

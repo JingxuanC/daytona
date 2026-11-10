@@ -17,7 +17,7 @@ func NewDaytonaMCPServer() *DaytonaMCPServer {
 	s := &DaytonaMCPServer{}
 
 	s.MCPServer = *server.NewMCPServer(
-		"Daytona MCP Server",
+		"Roost MCP Server",
 		"0.0.0-dev",
 		server.WithRecovery(),
 		server.WithPromptCapabilities(false),

@@ -10,8 +10,8 @@ import (
 
 var SandboxCmd = &cobra.Command{
 	Use:     "sandbox",
-	Short:   "Manage Daytona sandboxes",
-	Long:    "Commands for managing Daytona sandboxes",
+	Short:   "Manage Roost sandboxes",
+	Long:    "Commands for managing Roost sandboxes",
 	Aliases: []string{"sandboxes"},
 	GroupID: internal.SANDBOX_GROUP,
 	Hidden:  true, // Deprecated: use top-level commands instead (e.g., "daytona start" instead of "daytona sandbox start")

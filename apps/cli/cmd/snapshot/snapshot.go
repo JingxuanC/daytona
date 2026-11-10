@@ -10,8 +10,8 @@ import (
 
 var SnapshotsCmd = &cobra.Command{
 	Use:     "snapshot",
-	Short:   "Manage Daytona snapshots",
-	Long:    "Commands for managing Daytona snapshots",
+	Short:   "Manage Roost snapshots",
+	Long:    "Commands for managing Roost snapshots",
 	Aliases: []string{"snapshots"},
 	GroupID: internal.SANDBOX_GROUP,
 }

@@ -12,7 +12,7 @@ import (
 
 var LogoutCmd = &cobra.Command{
 	Use:     "logout",
-	Short:   "Logout from Daytona",
+	Short:   "Logout from Roost",
 	Args:    cobra.NoArgs,
 	GroupID: internal.USER_GROUP,
 	RunE: func(cmd *cobra.Command, args []string) error {

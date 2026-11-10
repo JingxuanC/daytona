@@ -63,7 +63,7 @@ func checkVersionsMismatch(res *http.Response) {
 	}
 
 	versionMismatchWarningOnce.Do(func() {
-		log.Warn(fmt.Sprintf("Version mismatch: Daytona CLI is on v%s and API is on v%s.\nMake sure the versions are aligned using 'brew upgrade daytonaio/cli/daytona' or by downloading the latest version from https://github.com/daytonaio/daytona/releases.", cliVersion, apiVersion))
+		log.Warn(fmt.Sprintf("Version mismatch: Roost CLI is on v%s and API is on v%s.\nMake sure the versions are aligned using 'brew upgrade daytonaio/cli/daytona' or by downloading the latest version from https://github.com/daytonaio/daytona/releases.", cliVersion, apiVersion))
 	})
 }
 

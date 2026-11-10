@@ -10,8 +10,8 @@ import (
 
 var VolumeCmd = &cobra.Command{
 	Use:     "volume",
-	Short:   "Manage Daytona volumes",
-	Long:    "Commands for managing Daytona volumes",
+	Short:   "Manage Roost volumes",
+	Long:    "Commands for managing Roost volumes",
 	Aliases: []string{"volumes"},
 	GroupID: internal.SANDBOX_GROUP,
 }

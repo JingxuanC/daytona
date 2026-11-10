@@ -113,7 +113,7 @@ export const handlers = [
   }),
   http.get(`${BILLING_API_URL}/v2/organization/:organizationId/billing-info`, async () => {
     return HttpResponse.json<BillingInfo>({
-      name: 'Daytona Demo',
+      name: 'Roost Demo',
       email: 'billing@example.com',
       address: {
         line1: '123 Main St',

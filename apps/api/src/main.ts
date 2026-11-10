@@ -115,7 +115,7 @@ async function bootstrap() {
     swaggerOptions: {
       initOAuth: {
         clientId: configService.get('oidc.clientId'),
-        appName: 'Daytona AI',
+        appName: 'Roost AI',
         scopes: ['openid', 'profile', 'email'],
         additionalQueryStringParams: {
           audience: configService.get('oidc.audience'),
@@ -156,7 +156,7 @@ async function bootstrap() {
 
   if (isApiEnabled()) {
     await app.listen(port, host)
-    Logger.log(`🚀 Daytona API is running on: http://${host}:${port}/${globalPrefix}`)
+    Logger.log(`🚀 Roost API is running on: http://${host}:${port}/${globalPrefix}`)
   } else {
     await app.init()
     app.flushLogs()

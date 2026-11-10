@@ -22,7 +22,7 @@ var (
 var ListCmd = &cobra.Command{
 	Use:     "list",
 	Short:   "List all snapshots",
-	Long:    "List all available Daytona snapshots",
+	Long:    "List all available Roost snapshots",
 	Aliases: common.GetAliases("list"),
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := context.Background()

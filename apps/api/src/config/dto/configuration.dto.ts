@@ -120,7 +120,7 @@ export class OidcConfig {
 @ApiSchema({ name: 'DaytonaConfiguration' })
 export class ConfigurationDto {
   @ApiProperty({
-    description: 'Daytona version',
+    description: 'Roost version',
     example: '0.0.1',
   })
   @IsString()

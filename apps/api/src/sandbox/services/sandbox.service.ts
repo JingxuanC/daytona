@@ -497,7 +497,7 @@ export class SandboxService {
 
       if (snapshots.length === 0) {
         throw new BadRequestError(
-          `Snapshot ${snapshotIdOrName} not found. Did you add it through the Daytona Dashboard?`,
+          `Snapshot ${snapshotIdOrName} not found. Did you add it through the Roost Dashboard?`,
         )
       }
 

@@ -13,8 +13,8 @@ import (
 
 var OrganizationCmd = &cobra.Command{
 	Use:     "organization",
-	Short:   "Manage Daytona organizations",
-	Long:    "Commands for managing Daytona organizations",
+	Short:   "Manage Roost organizations",
+	Long:    "Commands for managing Roost organizations",
 	Aliases: []string{"organizations", "org", "orgs"},
 	GroupID: internal.USER_GROUP,
 	PersistentPreRunE: func(cmd *cobra.Command, args []string) error {

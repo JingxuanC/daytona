@@ -20,7 +20,7 @@ import (
 
 var LoginCmd = &cobra.Command{
 	Use:     "login",
-	Short:   "Log in to Daytona",
+	Short:   "Log in to Roost",
 	Args:    cobra.NoArgs,
 	GroupID: internal.USER_GROUP,
 	RunE: func(cmd *cobra.Command, args []string) error {
@@ -32,7 +32,7 @@ var LoginCmd = &cobra.Command{
 
 		items := []view_common.SelectItem{
 			{Title: "Login with Browser", Desc: "Authenticate using OAuth in your browser"},
-			{Title: "Set Daytona API Key", Desc: "Authenticate using Daytona API key"},
+			{Title: "Set Roost API Key", Desc: "Authenticate using Roost API key"},
 		}
 
 		choice, err := view_common.Select("Select Authentication Method", items)
@@ -45,11 +45,11 @@ var LoginCmd = &cobra.Command{
 		}
 
 		var tokenConfig *config.Token
-		setApiKey := choice == "Set Daytona API Key"
+		setApiKey := choice == "Set Roost API Key"
 
 		if setApiKey {
 			// Prompt for API key
-			apiKey, err := view_common.PromptForInput("", "Enter your Daytona API key", "You can find it in the Daytona dashboard - https://app.daytona.io/dashboard")
+			apiKey, err := view_common.PromptForInput("", "Enter your Roost API key", "You can find it in the Roost dashboard - https://app.daytona.io/dashboard")
 			if err != nil {
 				return err
 			}
@@ -101,7 +101,7 @@ func updateProfileWithLogin(tokenConfig *config.Token, apiKey *string) error {
 		activeProfile.Api.Token = nil
 		activeProfile.Api.Key = apiKey
 
-		view_common.RenderInfoMessageBold("Successfully set Daytona API key!")
+		view_common.RenderInfoMessageBold("Successfully set Roost API key!")
 	}
 
 	if tokenConfig != nil {

@@ -21,7 +21,7 @@ type CreateFolderArgs struct {
 
 func GetCreateFolderTool() mcp.Tool {
 	return mcp.NewTool("create_folder",
-		mcp.WithDescription("Create a new folder in the Daytona sandbox."),
+		mcp.WithDescription("Create a new folder in the Roost sandbox."),
 		mcp.WithString("folderPath", mcp.Required(), mcp.Description("Path to the folder to create.")),
 		mcp.WithString("mode", mcp.Description("Mode of the folder to create (defaults to 0755).")),
 		mcp.WithString("id", mcp.Required(), mcp.Description("ID of the sandbox to create the folder in.")),

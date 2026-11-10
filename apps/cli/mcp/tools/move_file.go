@@ -21,7 +21,7 @@ type MoveFileArgs struct {
 
 func GetMoveFileTool() mcp.Tool {
 	return mcp.NewTool("move_file",
-		mcp.WithDescription("Move or rename a file in the Daytona sandbox."),
+		mcp.WithDescription("Move or rename a file in the Roost sandbox."),
 		mcp.WithString("sourcePath", mcp.Required(), mcp.Description("Source path of the file to move.")),
 		mcp.WithString("destPath", mcp.Required(), mcp.Description("Destination path where to move the file.")),
 		mcp.WithString("id", mcp.Required(), mcp.Description("ID of the sandbox to move the file in.")),

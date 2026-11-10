@@ -26,7 +26,7 @@ type FileUploadArgs struct {
 
 func GetFileUploadTool() mcp.Tool {
 	return mcp.NewTool("file_upload",
-		mcp.WithDescription("Upload files to the Daytona sandbox from text or base64-encoded binary content. Creates necessary parent directories automatically and verifies successful writes. Files persist during the session and have appropriate permissions for further tool operations. Supports overwrite controls and maintains original file formats."),
+		mcp.WithDescription("Upload files to the Roost sandbox from text or base64-encoded binary content. Creates necessary parent directories automatically and verifies successful writes. Files persist during the session and have appropriate permissions for further tool operations. Supports overwrite controls and maintains original file formats."),
 		mcp.WithString("filePath", mcp.Required(), mcp.Description("Path to the file to upload. Files should always be uploaded to the /tmp directory if user doesn't specify otherwise.")),
 		mcp.WithString("content", mcp.Required(), mcp.Description("Content of the file to upload.")),
 		mcp.WithString("encoding", mcp.Required(), mcp.Description("Encoding of the file to upload.")),

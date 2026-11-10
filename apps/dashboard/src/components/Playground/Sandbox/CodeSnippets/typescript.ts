@@ -26,7 +26,7 @@ export const TypeScriptSnippetGenerator: CodeSnippetGenerator = {
 
   getClientInit(p) {
     return [
-      '\t// Initialize the Daytona client',
+      '\t// Initialize the Roost client',
       `\tconst daytona = new Daytona(${p.actions.useConfigObject ? 'config' : ''})`,
     ]
       .filter(Boolean)

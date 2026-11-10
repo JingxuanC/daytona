@@ -305,7 +305,7 @@ export function SandboxTable({
                 hasFilters ? null : (
                   <div className="space-y-2">
                     <p>Spin up a Sandbox to run code in an isolated environment.</p>
-                    <p>Use the Daytona SDK or CLI to create one.</p>
+                    <p>Use the SDK or CLI to create one.</p>
                     <p>
                       <button
                         onClick={() => navigate(RoutePath.ONBOARDING)}

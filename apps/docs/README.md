@@ -2,21 +2,15 @@
 
 [![Documentation](https://img.shields.io/github/v/release/daytonaio/docs?label=Docs&color=23cc71)](https://www.daytona.io/docs)
 ![License](https://img.shields.io/badge/License-AGPL--3-blue)
-[![Go Report Card](https://goreportcard.com/badge/github.com/daytonaio/daytona)](https://goreportcard.com/report/github.com/daytonaio/daytona)
-[![Issues - daytona](https://img.shields.io/github/issues/daytonaio/daytona)](https://github.com/daytonaio/daytona/issues)
-![GitHub Release](https://img.shields.io/github/v/release/daytonaio/daytona)
+[![Go Report Card](https://goreportcard.com/badge/github.com/JingxuanC/daytona)](https://goreportcard.com/report/github.com/JingxuanC/daytona)
+[![Issues - daytona](https://img.shields.io/github/issues/JingxuanC/daytona)](https://github.com/JingxuanC/daytona/issues)
+![GitHub Release](https://img.shields.io/github/v/release/JingxuanC/daytona)
 
 </div>
 
 &nbsp;
 
-<div align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://github.com/daytonaio/daytona/raw/main/assets/images/Daytona-logotype-white.png">
-    <source media="(prefers-color-scheme: light)" srcset="https://github.com/daytonaio/daytona/raw/main/assets/images/Daytona-logotype-black.png">
-    <img alt="Daytona logo" src="https://github.com/daytonaio/daytona/raw/main/assets/images/Daytona-logotype-black.png" width="50%">
-  </picture>
-</div>
+<h1 align="center">Roost</h1>
 
 <h3 align="center">
   Run AI Code.
@@ -27,10 +21,9 @@
 
 <p align="center">
     <a href="https://www.daytona.io/docs"> Documentation </a>·
-    <a href="https://github.com/daytonaio/daytona/issues/new?assignees=&labels=bug&projects=&template=bug_report.md&title=%F0%9F%90%9B+Bug+Report%3A+"> Report Bug </a>·
-    <a href="https://github.com/daytonaio/daytona/issues/new?assignees=&labels=enhancement&projects=&template=feature_request.md&title=%F0%9F%9A%80+Feature%3A+"> Request Feature </a>·
+    <a href="https://github.com/JingxuanC/daytona/issues/new?assignees=&labels=bug&projects=&template=bug_report.md&title=%F0%9F%90%9B+Bug+Report%3A+"> Report Bug </a>·
+    <a href="https://github.com/JingxuanC/daytona/issues/new?assignees=&labels=enhancement&projects=&template=feature_request.md&title=%F0%9F%9A%80+Feature%3A+"> Request Feature </a>·
     <a href="https://go.daytona.io/slack"> Join our Slack </a>·
-    <a href="https://x.com/daytonaio"> Connect on X </a>
 </p>
 
 <p align="center">

@@ -139,7 +139,7 @@ export function ApiKeyTable({ data, loading, isLoadingKey, onRevokeRequest }: Da
               description={
                 hasSearch ? null : (
                   <div className="space-y-2">
-                    <p>API Keys authenticate requests made through the Daytona SDK or CLI.</p>
+                    <p>API Keys authenticate requests made through the SDK or CLI.</p>
                     <p>
                       Generate one and{' '}
                       <a

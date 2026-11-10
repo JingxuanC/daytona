@@ -10,7 +10,7 @@ import (
 func NotifyEmptySandboxList(tip bool) {
 	common.RenderInfoMessageBold("No sandboxes found")
 	if tip {
-		common.RenderTip("Use the Daytona SDK to get started.")
+		common.RenderTip("Use the SDK to get started.")
 	}
 }
 

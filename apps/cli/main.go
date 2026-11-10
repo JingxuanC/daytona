@@ -22,8 +22,8 @@ import (
 
 var rootCmd = &cobra.Command{
 	Use:               "daytona",
-	Short:             "Daytona CLI",
-	Long:              "Command line interface for Daytona Sandboxes",
+	Short:             "Roost CLI",
+	Long:              "Command line interface for Roost Sandboxes",
 	DisableAutoGenTag: true,
 	SilenceUsage:      true,
 	SilenceErrors:     true,
@@ -63,7 +63,7 @@ func init() {
 
 	rootCmd.CompletionOptions.HiddenDefaultCmd = true
 	rootCmd.PersistentFlags().BoolP("help", "", false, "help for daytona")
-	rootCmd.Flags().BoolP("version", "v", false, "Display the version of Daytona")
+	rootCmd.Flags().BoolP("version", "v", false, "Display the version of Roost")
 
 	rootCmd.PreRun = func(command *cobra.Command, args []string) {
 		versionFlag, _ := command.Flags().GetBool("version")

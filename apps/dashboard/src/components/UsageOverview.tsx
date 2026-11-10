@@ -115,7 +115,7 @@ function GpuZeroQuotaValue({
 
   return (
     <a
-      href="mailto:sales@daytona.io?subject=GPU%20quota%20request"
+      href="mailto:sales@roost.example?subject=GPU%20quota%20request"
       className="text-xs font-medium text-foreground underline underline-offset-2 hover:text-muted-foreground text-nowrap"
     >
       Contact Sales
