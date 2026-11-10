@@ -48,6 +48,7 @@ import { ClickHouseModule } from './clickhouse/clickhouse.module'
 import { SandboxTelemetryModule } from './sandbox-telemetry/sandbox-telemetry.module'
 import { ProviderModule } from './provider/provider.module'
 import { MarketModule } from './market/market.module'
+import { InternalRoostModule } from './internal-roost/internal-roost.module'
 
 @Module({
   imports: [
@@ -192,6 +193,7 @@ import { MarketModule } from './market/market.module'
     AdminModule,
     ProviderModule,
     MarketModule,
+    InternalRoostModule,
     EmailModule.forRootAsync({
       inject: [TypedConfigService],
       useFactory: (configService: TypedConfigService) => {
@@ -240,7 +242,15 @@ import { MarketModule } from './market/market.module'
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(VersionHeaderMiddleware).forRoutes({ path: '{*path}', method: RequestMethod.ALL })
-    consumer.apply(FailedAuthRateLimitMiddleware).forRoutes({ path: '{*path}', method: RequestMethod.ALL })
-    consumer.apply(MaintenanceMiddleware).forRoutes({ path: '{*path}', method: RequestMethod.ALL })
+    // The internal Roost API is served by its own listener: public-port middleware that
+    // can rate-limit/block normal traffic must not interfere with it.
+    consumer
+      .apply(FailedAuthRateLimitMiddleware)
+      .exclude({ path: 'internal/roost/{*path}', method: RequestMethod.ALL })
+      .forRoutes({ path: '{*path}', method: RequestMethod.ALL })
+    consumer
+      .apply(MaintenanceMiddleware)
+      .exclude({ path: 'internal/roost/{*path}', method: RequestMethod.ALL })
+      .forRoutes({ path: '{*path}', method: RequestMethod.ALL })
   }
 }
