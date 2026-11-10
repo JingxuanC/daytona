@@ -308,3 +308,28 @@ curl -s http://127.0.0.1:3100/internal/roost/v1/credentials     # 公网端口 �
 - 可选沙箱操作：snapshot 为异步操作，M1 无法同步返回 `snapshot_id`/快照状态（只有 `snapshot_name`）；
   resize 收到的是 fork 字段名（`cpu/memory/disk`，非 `*_gib`）；内部 resize 不检查公开 API 的
   `SANDBOX_RESIZE` feature flag。
+
+## 5.5 数据面实现（M3，2026-11-10）
+
+内部监听器同时承载数据面路由（docs/03-api-contract.md §B6），供市场服务的边缘代理
+（或后续 Envoy 直连）转发 toolbox / preview 流量：
+
+```
+ANY /internal/roost/v1/sandboxes/{sandboxId}/toolbox/*
+ANY /internal/roost/v1/sandboxes/{sandboxId}/preview/*
+```
+
+- 鉴权：`RoostMtlsGuard` + `RoostDataPlaneGuard`；要求 `aud=daytona-data`、
+  `sandbox_id == {sandboxId}`、scope 分别为 `toolbox` / `preview`、jti 未吊销。
+- 上游：`sandbox.runnerId → runner.proxyUrl`，请求头注入
+  `X-Daytona-Authorization: Bearer {runner.apiKey}`（客户端 `Authorization` 一律剥离）。
+  - toolbox：`{runner.proxyUrl}/sandboxes/{id}/toolbox{rest}`
+  - preview：`{runner.proxyUrl}/sandboxes/{id}/toolbox/proxy/{port}{rest}`
+    - 端口来源：`?port=` 优先；否则取路径首段数字（`/preview/3000/app` → 3000）。
+    - 两者都没有 → `400 invalid_request`（端口从 query 消费后不再转发上游）。
+- 流式：请求/响应均用 `node:http(s)` 直接 pipe，SSE / chunked / 二进制不缓冲；
+  响应头先 `flushHeaders`。
+- 错误：沙箱不存在/不属于该 org → `404`；非 started → `409`；runner 不可用/无 proxyUrl →
+  `502 upstream_unavailable`；上游连接失败 → `502`（错误 envelope 与内部控制面一致）。
+- WebSocket（VNC/preview）尚未在内部监听器上接线：Node 升级请求需要 listener 级
+  `upgrade` 钩子与凭证校验，列为 M3.1。当前 toolbox 的 HTTP/SSE 数据面已可用。

@@ -12,6 +12,7 @@ import { RegionQuota } from '../organization/entities/region-quota.entity'
 import { Sandbox } from '../sandbox/entities/sandbox.entity'
 import { SandboxUsagePeriod } from '../usage/entities/sandbox-usage-period.entity'
 import { InternalCapacityController } from './controllers/internal-capacity.controller'
+import { InternalDataPlaneController } from './controllers/internal-data-plane.controller'
 import { InternalCredentialsController } from './controllers/internal-credentials.controller'
 import { InternalQuotasController } from './controllers/internal-quotas.controller'
 import { InternalSandboxesController } from './controllers/internal-sandboxes.controller'
@@ -27,6 +28,8 @@ import { RoostOrgBindingGuard } from './guards/roost-org-binding.guard'
 import { RoostScopeGuard } from './guards/roost-scope.guard'
 import { InternalRoostServerService } from './internal-roost.server.service'
 import { RoostCredentialsService } from './services/roost-credentials.service'
+import { RoostDataPlaneProxyService } from './services/roost-data-plane-proxy.service'
+import { RoostDataPlaneService } from './services/roost-data-plane.service'
 import { RoostKeyService } from './services/roost-key.service'
 import { RoostQuotasService } from './services/roost-quotas.service'
 import { RoostRegionsService } from './services/roost-regions.service'
@@ -65,6 +68,7 @@ import { RoostUsageService } from './services/roost-usage.service'
     InternalQuotasController,
     InternalSandboxesController,
     InternalUsageController,
+    InternalDataPlaneController,
   ],
   providers: [
     InternalRoostServerService,
@@ -76,6 +80,8 @@ import { RoostUsageService } from './services/roost-usage.service'
     RoostQuotasService,
     RoostSandboxesService,
     RoostUsageService,
+    RoostDataPlaneService,
+    RoostDataPlaneProxyService,
     RoostMtlsGuard,
     RoostJwtGuard,
     RoostOrgBindingGuard,

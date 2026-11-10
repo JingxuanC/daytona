@@ -252,7 +252,7 @@ export class UsageService implements TrackableJobExecutions, OnApplicationShutdo
         .createQueryBuilder('period')
         .innerJoin(Sandbox, 'sandbox', 'sandbox.id = period.sandboxId')
         .where('period.endAt IS NULL')
-        .andWhere('period.organizationId <> :warmPoolOrganization', {
+        .andWhere('period.organizationId <> CAST(:warmPoolOrganization AS uuid)', {
           warmPoolOrganization: SANDBOX_WARM_POOL_UNASSIGNED_ORGANIZATION,
         })
         .andWhere('sandbox.runnerId IS DISTINCT FROM period.runnerId')
