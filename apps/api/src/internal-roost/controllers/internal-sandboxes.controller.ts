@@ -18,6 +18,12 @@ import { ApiExcludeController } from '@nestjs/swagger'
 import { Public } from '../../auth/decorators/public.decorator'
 import { RoostScopes } from '../decorators/roost-scopes.decorator'
 import { CreateSandboxBody, SandboxControlResponse } from '../dto/internal-roost.dto'
+import {
+  PauseSandboxBody,
+  ResizeSandboxBody,
+  SnapshotSandboxBody,
+  SnapshotSandboxResponse,
+} from '../dto/sandbox-ops.dto'
 import { RoostScope } from '../enums/roost-scope.enum'
 import { RoostExceptionsFilter } from '../filters/roost-exceptions.filter'
 import { RoostJwtGuard } from '../guards/roost-jwt.guard'
@@ -91,5 +97,50 @@ export class InternalSandboxesController {
     @Param('sandboxId') sandboxId: string,
   ): Promise<SandboxControlResponse> {
     return this.sandboxesService.stopSandbox(orgId, sandboxId)
+  }
+
+  /** Optional M1 operation. Only STARTED VM/Windows sandboxes can be paused (fork rules). */
+  @Post('orgs/:orgId/sandbox/:sandboxId/pause')
+  @HttpCode(200)
+  @UseGuards(RoostJwtGuard, RoostOrgBindingGuard, RoostScopeGuard)
+  @RoostScopes(RoostScope.SANDBOX_CONTROL)
+  async pauseSandbox(
+    @Param('orgId') orgId: string,
+    @Param('sandboxId') sandboxId: string,
+    @Body() body: PauseSandboxBody,
+  ): Promise<SandboxControlResponse> {
+    return this.sandboxesService.pauseSandbox(orgId, sandboxId, body)
+  }
+
+  /**
+   * Optional M1 operation. Body fields are exactly the fork's `ResizeSandboxDto`
+   * (cpu/memory/disk); unsupported fields are rejected with 400.
+   */
+  @Post('orgs/:orgId/sandbox/:sandboxId/resize')
+  @HttpCode(200)
+  @UseGuards(RoostJwtGuard, RoostOrgBindingGuard, RoostScopeGuard)
+  @RoostScopes(RoostScope.SANDBOX_CONTROL)
+  async resizeSandbox(
+    @Param('orgId') orgId: string,
+    @Param('sandboxId') sandboxId: string,
+    @Body() body: ResizeSandboxBody,
+  ): Promise<SandboxControlResponse> {
+    return this.sandboxesService.resizeSandbox(orgId, sandboxId, body)
+  }
+
+  /**
+   * Optional M1 operation. Body fields are the fork's `CreateSandboxSnapshotDto`
+   * (name + includeMemory); unsupported fields are rejected with 400.
+   */
+  @Post('orgs/:orgId/sandbox/:sandboxId/snapshot')
+  @HttpCode(200)
+  @UseGuards(RoostJwtGuard, RoostOrgBindingGuard, RoostScopeGuard)
+  @RoostScopes(RoostScope.SANDBOX_CONTROL)
+  async snapshotSandbox(
+    @Param('orgId') orgId: string,
+    @Param('sandboxId') sandboxId: string,
+    @Body() body: SnapshotSandboxBody,
+  ): Promise<SnapshotSandboxResponse> {
+    return this.sandboxesService.snapshotSandbox(orgId, sandboxId, body)
   }
 }
