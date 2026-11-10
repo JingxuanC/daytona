@@ -158,6 +158,9 @@ JWT claims：`iss`（默认 `daytona`）、`aud`、`sub`（mTLS 身份，如 `CN
 | DELETE | `/internal/roost/v1/orgs/{orgId}/sandbox/{sandboxId}` | `sandbox:control` | 204 |
 | POST | `/internal/roost/v1/orgs/{orgId}/sandbox/{sandboxId}/start` | `sandbox:control` | |
 | POST | `/internal/roost/v1/orgs/{orgId}/sandbox/{sandboxId}/stop` | `sandbox:control` | |
+| POST | `/internal/roost/v1/orgs/{orgId}/sandbox/{sandboxId}/pause` | `sandbox:control` | 可选 M1 操作，见 5.5 |
+| POST | `/internal/roost/v1/orgs/{orgId}/sandbox/{sandboxId}/resize` | `sandbox:control` | 可选 M1 操作，见 5.5 |
+| POST | `/internal/roost/v1/orgs/{orgId}/sandbox/{sandboxId}/snapshot` | `sandbox:control` | 可选 M1 操作，见 5.5 |
 | GET | `/internal/roost/v1/orgs/{orgId}/usage?from=&to=&group_by=sandbox` | `usage:read` | 整数秒用量，来自 `sandbox_usage_periods` |
 
 - 路径 `orgId` 与 JWT `org_id` 不一致 → `403 forbidden`（`RoostOrgBindingGuard`）。
@@ -213,6 +216,34 @@ Daytona 更细的状态按下表折叠：`pending_build/building_snapshot → cr
 
 本接口不返回金额，金额由市场服务用租约价格快照计算。
 
+### 5.5 M1 可选沙箱操作（pause / resize / snapshot）
+
+三个端点都要求 `aud=daytona-control` + scope `sandbox:control`，组织只取自 JWT `org_id`，
+路径 org 与声明不一致 `403`，sandbox 不属于该组织 `404`。请求体中出现未支持字段（含
+`organizationId`）一律 `400 invalid_request`，错误 message 写明 `Unsupported field(s) ... Supported fields ...`。
+
+| 端点 | body（fork 实际支持） | 成功响应 | 状态码 |
+|---|---|---|---|
+| `POST .../sandbox/{sandboxId}/pause` | 无（传任何字段都 400） | `{ id, state, organization_id }` | `200` |
+| `POST .../sandbox/{sandboxId}/resize` | `{ cpu?, memory?, disk? }`，number >= 1，至少一个 | `{ id, state, organization_id }` | `200` |
+| `POST .../sandbox/{sandboxId}/snapshot` | `{ name, includeMemory? }`（`name` 必填；`include_memory` 别名） | `{ id, state, organization_id, snapshot_name }` | `200` |
+
+实现全部委托现有 `SandboxService`，不复制生命周期代码：
+
+- **pause**：`SandboxService.pause`。仅 `STARTED` 的 VM/Windows 沙箱可 pause；容器沙箱返回
+  `422`（Daytona 既有语义），其它状态 `400`。
+- **resize**：`SandboxService.resize`（`ResizeSandboxDto` 只支持 `cpu/memory/disk`）。
+  `memory_gib`/`disk_gib`/`gpu` 等字段**不支持**，会 400。fork 既有语义继续生效：`STARTED`
+  只能增加 cpu/memory 不能减少；`disk` 只能增加且要求 `STOPPED`；超出组织/region 配额 400。
+  **注意**：公开 API 的 resize 有 `SANDBOX_RESIZE` feature flag 门控，内部端点直接调用服务层
+  （服务本身无该 gate），因此不受 flag 影响 —— 如需要一致门控可在后续接 `FeatureFlagsService`。
+- **snapshot**：`SandboxService.createSnapshotFromSandbox`（`CreateSandboxSnapshotDto`）。
+  **fork 不支持自命名/空名**：`name` 必填（<=255，安全显示字符串），market 侧需自行生成
+  （如 `sbx-<sandboxId>-<epoch>`）。`includeMemory` 仅 Windows 沙箱支持，其余返回 400。
+  该调用是**异步**的：同步返回的是沙箱控制视图，快照实体由 snapshot manager 异步创建，
+  M1 不提供“按 name 查快照 id/状态”的内部端点，因此响应只有 `snapshot_name`（没有
+  `snapshot_id`）。后续用该 `name` 作为 create 沙箱的 `snapshot` 字段即可（create 接受 id 或 name）。
+
 ## 6. M3 数据面（best effort）
 
 提供 `RoostDataPlaneGuard`（`InternalRoostModule` 导出）供 toolbox/preview 转发接入：
@@ -252,7 +283,8 @@ $NODE node_modules/jest/bin/jest.js --config apps/api/jest.config.ts --passWithN
 
 单测覆盖：JWT 签名/过期/篡改、scope 跨 scope 拒绝、audience 隔离、组织路径绑定、mTLS fallback、
 tenant 幂等（含并发 23505 竞态）、配额 source 聚合/物化/删除回收、沙箱 org 绑定（忽略 body
-organizationId）、吊销 TTL/幂等/过期、runner 心跳 200/404/跨组织 404、独立监听器与公网隔离 wiring。
+organizationId）、吊销 TTL/幂等/过期、runner 心跳 200/404/跨组织 404、暂停/resize/snapshot
+（org 绑定、跨组织 404、未支持字段 400、snapshot 名称校验、scope 元数据与 403）、独立监听器与公网隔离 wiring。
 
 本地手工验证（无 DB 的 dev 环境可用 `curl` 验证监听行为；有 DB/Redis 时可完整联调）：
 
@@ -273,3 +305,6 @@ curl -s http://127.0.0.1:3100/internal/roost/v1/credentials     # 公网端口 �
   需按新 node external id 生成新 region。
 - `DELETE /runners/{runnerId}` 只自动置 unschedulable，不主动置 draining；节点上有沙箱时返回 400，
   市场侧后台可重试，沙箱结束/迁移后再删除成功。
+- 可选沙箱操作：snapshot 为异步操作，M1 无法同步返回 `snapshot_id`/快照状态（只有 `snapshot_name`）；
+  resize 收到的是 fork 字段名（`cpu/memory/disk`，非 `*_gib`）；内部 resize 不检查公开 API 的
+  `SANDBOX_RESIZE` feature flag。
