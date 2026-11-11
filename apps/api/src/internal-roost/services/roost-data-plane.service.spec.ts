@@ -68,6 +68,24 @@ describe('buildDataPlaneUpstreamUrl', () => {
     )
   })
 
+  it('preserves the trailing slash on a root preview request', () => {
+    const slash = buildDataPlaneUpstreamUrl({
+      kind: 'preview',
+      sandboxId: SANDBOX_ID,
+      runnerProxyUrl: RUNNER_PROXY_URL,
+      originalUrl: `/internal/roost/v1/sandboxes/${SANDBOX_ID}/preview/9090/`,
+    })
+    expect(slash.url).toBe(`${RUNNER_PROXY_URL}/sandboxes/${SANDBOX_ID}/toolbox/proxy/9090/`)
+
+    const querySlash = buildDataPlaneUpstreamUrl({
+      kind: 'preview',
+      sandboxId: SANDBOX_ID,
+      runnerProxyUrl: RUNNER_PROXY_URL,
+      originalUrl: `/internal/roost/v1/sandboxes/${SANDBOX_ID}/preview/?port=8080`,
+    })
+    expect(querySlash.url).toBe(`${RUNNER_PROXY_URL}/sandboxes/${SANDBOX_ID}/toolbox/proxy/8080/`)
+  })
+
   it('prefers ?port= and consumes it from the forwarded query', () => {
     const built = buildDataPlaneUpstreamUrl({
       kind: 'preview',
@@ -116,6 +134,7 @@ describe('preview/query helpers', () => {
   it('resolves the port from query or path', () => {
     expect(resolvePreviewPort('port=9000', '/app')).toEqual({ port: 9000, path: '/app' })
     expect(resolvePreviewPort('', '/3000')).toEqual({ port: 3000, path: '' })
+    expect(resolvePreviewPort('', '/3000/')).toEqual({ port: 3000, path: '/' })
   })
 
   it('rejects invalid ports', () => {
