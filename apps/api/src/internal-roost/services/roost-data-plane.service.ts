@@ -182,7 +182,10 @@ export function resolvePreviewPort(
     if (port === null) {
       throw new BadRequestException(`Invalid port in path: ${match[1]}`)
     }
-    const remaining = match[2] ? `/${match[2]}` : ''
+    // Preserve a trailing slash: `/preview/9090/` must stay `/proxy/9090/`.
+    // Gin daemons redirect `/proxy/9090` → `/proxy/9090/` with a 301, which a
+    // WebSocket upgrade cannot follow.
+    const remaining = match[2] !== undefined ? `/${match[2]}` : ''
     return { port, path: remaining }
   }
 
@@ -200,8 +203,13 @@ function parsePort(value: string): number | null {
 }
 
 function normalizeRestPath(restPath: string): string {
-  if (!restPath || restPath === '/') {
+  if (!restPath) {
     return ''
+  }
+  // Keep a bare `/`: dropping it makes the daemon answer with a 301 redirect
+  // (and WebSocket upgrades cannot follow redirects).
+  if (restPath === '/') {
+    return '/'
   }
   return restPath.startsWith('/') ? restPath : `/${restPath}`
 }
