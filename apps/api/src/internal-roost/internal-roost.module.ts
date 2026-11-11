@@ -27,6 +27,7 @@ import { RoostMtlsGuard } from './guards/roost-mtls.guard'
 import { RoostOrgBindingGuard } from './guards/roost-org-binding.guard'
 import { RoostScopeGuard } from './guards/roost-scope.guard'
 import { InternalRoostServerService } from './internal-roost.server.service'
+import { InternalRoostUpgradeService } from './internal-roost.upgrade.service'
 import { RoostCredentialsService } from './services/roost-credentials.service'
 import { RoostDataPlaneProxyService } from './services/roost-data-plane-proxy.service'
 import { RoostDataPlaneService } from './services/roost-data-plane.service'
@@ -72,6 +73,7 @@ import { RoostUsageService } from './services/roost-usage.service'
   ],
   providers: [
     InternalRoostServerService,
+    InternalRoostUpgradeService,
     RoostKeyService,
     RoostCredentialsService,
     RoostTenantsService,

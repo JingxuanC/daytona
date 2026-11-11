@@ -31,6 +31,16 @@ export interface BuiltDataPlaneUpstreamUrl {
   port?: number
 }
 
+/** Parsed WebSocket upgrade request for the internal data plane. */
+export interface ParsedDataPlaneUpgradeRequest {
+  kind: RoostDataPlaneKind
+  sandboxId: string
+  /** Raw path after `.../{kind}`, e.g. `/3000/ws` (never decoded). */
+  restPath: string
+  /** Raw query string without the leading `?`. */
+  rawQuery: string
+}
+
 /** Hop-by-hop headers that must never be forwarded in either direction. */
 export const HOP_BY_HOP_HEADERS = new Set([
   'connection',

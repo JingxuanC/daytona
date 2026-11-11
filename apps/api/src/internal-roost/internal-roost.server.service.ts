@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: AGPL-3.0
  */
 
-import { INestApplication, Injectable, Logger, OnApplicationShutdown } from '@nestjs/common'
+import { INestApplication, Injectable, Logger, OnApplicationShutdown, Optional } from '@nestjs/common'
 import { INestApplicationContext } from '@nestjs/common/interfaces'
 import { randomUUID } from 'node:crypto'
 import { readFileSync } from 'node:fs'
@@ -15,6 +15,7 @@ import { TypedConfigService } from '../config/typed-config.service'
 import { isApiEnabled } from '../common/utils/app-mode'
 import { INTERNAL_ROOST_REQUEST_ID_HEADER, isLoopbackHost, isRoostInternalPath } from './internal-roost.constants'
 import { RoostInternalRequest } from './interfaces/roost-request.interface'
+import { InternalRoostUpgradeService } from './internal-roost.upgrade.service'
 
 type RoostServer = HttpServer | HttpsServer
 
@@ -39,7 +40,10 @@ export class InternalRoostServerService implements OnApplicationShutdown {
   private started = false
   private address: { host: string; port: number; tls: boolean } | null = null
 
-  constructor(private readonly configService: TypedConfigService) {}
+  constructor(
+    private readonly configService: TypedConfigService,
+    @Optional() private readonly upgradeService?: InternalRoostUpgradeService,
+  ) {}
 
   async start(app: INestApplication | INestApplicationContext): Promise<void> {
     if (!isApiEnabled()) {
@@ -101,6 +105,8 @@ export class InternalRoostServerService implements OnApplicationShutdown {
       this.server = createHttpServer(dispatcher)
     }
 
+    this.attachWebSocketUpgradeHandler(this.server)
+
     await new Promise<void>((resolve, reject) => {
       const server = this.server as RoostServer
       const onError = (error: Error) => {
@@ -127,6 +133,25 @@ export class InternalRoostServerService implements OnApplicationShutdown {
     this.logger.log(
       `Internal Roost API listening on ${scheme}://${host}:${internalRoost.port}/internal/roost/v1 (${authMode})`,
     )
+  }
+
+  /**
+   * WebSocket upgrades (preview/VNC) are handled outside the express pipeline: the
+   * upgrade service performs data-plane credential validation before the runner
+   * handshake. Non data-plane upgrade requests are destroyed by the upgrade service.
+   */
+  private attachWebSocketUpgradeHandler(server: RoostServer): void {
+    if (!this.upgradeService) {
+      this.logger.warn('Internal Roost WebSocket upgrade handler is not registered')
+      return
+    }
+    server.on('upgrade', (request, socket, head) => {
+      void this.upgradeService!.handleUpgrade(request, socket, head).catch((error) => {
+        this.logger.error('Unhandled internal Roost WebSocket upgrade error', error as Error)
+        socket.destroy()
+      })
+    })
+    this.logger.log('Internal Roost WebSocket upgrade handler registered (/sandboxes/{id}/(preview|toolbox))')
   }
 
   async onApplicationShutdown(): Promise<void> {
