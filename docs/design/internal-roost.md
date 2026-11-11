@@ -1,6 +1,6 @@
 # 内部 Roost 控制面（fork 侧 `/internal/roost/v1`）设计与契约
 
-> 状态：M0 + M1 已落地，M3 数据面提供 guard 与接入说明（转发实现不在本 PR 范围）。
+> 状态：M0 + M1 已落地；M3 数据面 HTTP/SSE/二进制 + WebSocket 升级（preview/VNC）均已实现。
 > 目标：让 Roost 市场服务（`roost-market-service`）以 mTLS + 短期受限 JWT 调用 Daytona fork 的
 > 内部接口，完成租户开通、节点（region/runner）代建、按 source 的配额下发、沙箱代管与整数秒用量读取。
 > 对外契约以市场仓 `api/internal-daytona.yaml` 为准，本文记录 fork 侧实现语义与偏差。
@@ -331,5 +331,41 @@ ANY /internal/roost/v1/sandboxes/{sandboxId}/preview/*
   响应头先 `flushHeaders`。
 - 错误：沙箱不存在/不属于该 org → `404`；非 started → `409`；runner 不可用/无 proxyUrl →
   `502 upstream_unavailable`；上游连接失败 → `502`（错误 envelope 与内部控制面一致）。
-- WebSocket（VNC/preview）尚未在内部监听器上接线：Node 升级请求需要 listener 级
-  `upgrade` 钩子与凭证校验，列为 M3.1。当前 toolbox 的 HTTP/SSE 数据面已可用。
+### WebSocket 升级（M3.1，已实现）
+
+preview/VNC 等场景走同一内部监听器的 Node `upgrade` 事件（`InternalRoostUpgradeService`），
+不经过 express 管道，因此鉴权在握手前独立完成：
+
+```
+GET /internal/roost/v1/sandboxes/{sandboxId}/preview/{rest}     Upgrade: websocket
+GET /internal/roost/v1/sandboxes/{sandboxId}/toolbox/{rest}     Upgrade: websocket
+```
+
+- **只接受** 上述两类数据面路径的 WebSocket 升级：其余 `/internal/roost/**` upgrade 直接
+  `socket.destroy()`；非 WebSocket 握手（缺 `Sec-WebSocket-Key` 等）返回 `400 invalid_request`。
+- **鉴权**（握手前，失败先写 HTTP 错误 envelope 再关闭 socket）：
+  - mTLS 已在 TLS 层完成（`requestCert + rejectUnauthorized`）；dev 无 CA fallback 仅接受回环；
+  - `Authorization: Bearer <aud=daytona-data JWT>` → `verifyDataToken` + `assertNotRevoked`；
+  - `aud` 必须为 `daytona-data`；`sandbox_id` 必须等于路径 `{sandboxId}`；
+    preview 路径要求 scope `preview`，toolbox 路径要求 scope `toolbox`；`org_id` 必须存在；
+  - 状态码：缺凭证/验签失败/已吊销 `401 unauthorized`；audience、sandbox 绑定、scope、
+    transport 不允许 `403 forbidden`。
+- **上游**（复用 `RoostDataPlaneService` 的 sandbox→runner 解析与端口约定）：
+  - preview：`ws(s)://{runner.proxyUrl}/sandboxes/{id}/toolbox/proxy/{port}{rest}`
+  - toolbox：`ws(s)://{runner.proxyUrl}/sandboxes/{id}/toolbox{rest}`
+  - 端口：`?port=` 优先，其次路径首段数字（`/preview/3000/ws` → 3000），都没有 → `400`；
+    被消费的 `port` query 不再转给上游。
+- **请求头**：只透传 `Sec-WebSocket-Key/Version/Protocol/Extensions`、`Origin`、`User-Agent`
+  （另加 `X-Forwarded-Host`），注入 `X-Daytona-Authorization: Bearer {runner.apiKey}`；
+  **客户端 `Authorization` 与 `Cookie` 一律不透传**。
+- **转发**：上游 `upgrade` 后把 `101 Switching Protocols` 响应头写回客户端 socket，处理双方
+  `head` 缓冲，随后双向 `pipe`；error/close 双向清理。**不设置 idle 超时**，长连接 WebSocket
+  不会被默认截断（socket 级的 HTTP server timeout 在 Node 中只作用于非升级连接）。
+- **错误语义**：sandbox 不存在/不属于该 org `404`；非 started `409`；runner 不可用/无 proxyUrl/
+  连接失败 `502 upstream_unavailable`；上游以非 101 HTTP 响应拒绝握手时，该响应（状态码/头/体）
+  原样转发给客户端。
+
+集成测试（`internal-roost.ws.spec.ts`）用 `ws` 包起的 fake runner WebSocket echo server +
+真实内部监听器验证：preview/toolbox echo、`?port=` 约定、跨 sandbox 403、缺凭证 401、
+上游 403 透传、runner 不可达 502、非数据面 upgrade 被销毁，以及自签证书下的真实
+`wss://` 升级 echo。

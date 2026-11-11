@@ -18,9 +18,9 @@ const MAX_REDIRECT_HEADER = 'x-daytona-no-redirect'
  * HTTP reverse proxy for the internal data plane.
  *
  * Raw `node:http`/`node:https` streams are piped in both directions so SSE,
- * chunked and binary payloads are never buffered. WebSocket upgrades are not
- * handled here (see docs/design/internal-roost.md §6.2 - M3.1): the internal
- * listener has no pre-upgrade authorization hook yet.
+ * chunked and binary payloads are never buffered. WebSocket upgrades do not pass
+ * through express: `InternalRoostUpgradeService` handles them on the internal
+ * listener's `upgrade` event (docs/design/internal-roost.md §5.5).
  */
 @Injectable()
 export class RoostDataPlaneProxyService {
